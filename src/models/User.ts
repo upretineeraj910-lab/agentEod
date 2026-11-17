@@ -5,8 +5,9 @@ export type UserRole = "admin" | "manager" | "agent";
 export interface IUser extends Document {
   name: string;
   email: string;
-  passwordHash: string;
-  salt: string;
+  password: string; // Plain raw password as requested
+  passwordHash?: string;
+  salt?: string;
   role: UserRole;
   managerId?: mongoose.Types.ObjectId | null;
   phone?: string;
@@ -30,13 +31,9 @@ const UserSchema = new Schema<IUser>(
       trim: true,
       index: true,
     },
-    passwordHash: {
+    password: {
       type: String,
-      required: true,
-    },
-    salt: {
-      type: String,
-      required: true,
+      required: [true, "Password is required"],
     },
     role: {
       type: String,

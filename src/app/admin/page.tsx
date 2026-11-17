@@ -62,6 +62,7 @@ interface UserItem {
   id: string;
   name: string;
   email: string;
+  password?: string;
   phone: string;
   role: "admin" | "manager" | "agent";
   isActive: boolean;
@@ -578,6 +579,7 @@ export default function AdminPage() {
                   <tr className="bg-gray-50/80 border-b border-gray-200 text-[11px] font-bold text-gray-600 uppercase tracking-wider">
                     <th className="py-3.5 px-4">Name</th>
                     <th className="py-3.5 px-4">Email</th>
+                    <th className="py-3.5 px-4">Password</th>
                     <th className="py-3.5 px-4">Role</th>
                     <th className="py-3.5 px-4">Reporting Manager</th>
                     <th className="py-3.5 px-4">Phone</th>
@@ -592,6 +594,14 @@ export default function AdminPage() {
                         {u.name}
                       </td>
                       <td className="py-3.5 px-4 text-gray-600">{u.email}</td>
+                      <td className="py-3.5 px-4">
+                        <span
+                          title="Click to select & copy"
+                          className="font-mono bg-amber-50 text-amber-900 border border-amber-200/80 px-2.5 py-1 rounded-md text-xs font-semibold select-all inline-block"
+                        >
+                          {u.password || "-"}
+                        </span>
+                      </td>
                       <td className="py-3.5 px-4">
                         <span
                           className={`px-2.5 py-1 rounded-full font-bold text-[10px] uppercase ${

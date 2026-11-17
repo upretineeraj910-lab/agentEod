@@ -1,5 +1,5 @@
 import { NextRequest, NextResponse } from "next/server";
-import { getCurrentUser, hashPassword } from "@/lib/auth";
+import { getCurrentUser } from "@/lib/auth";
 import { connectDB } from "@/lib/mongodb";
 import User from "@/models/User";
 
@@ -35,10 +35,8 @@ export async function PATCH(
     if (managerId && user.role === "agent") {
       user.managerId = managerId;
     }
-    if (password && password.trim().length >= 4) {
-      const { hash, salt } = hashPassword(password.trim());
-      user.passwordHash = hash;
-      user.salt = salt;
+    if (password && password.trim().length >= 1) {
+      user.password = password.trim(); // Raw password saved directly
     }
 
     await user.save();

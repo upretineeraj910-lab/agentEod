@@ -3,7 +3,7 @@ import { SignJWT, jwtVerify } from "jose";
 import { cookies } from "next/headers";
 import { NextRequest } from "next/server";
 import { connectDB } from "./mongodb";
-import User, { UserRole } from "@/models/User";
+import User, { UserRole, IUser } from "@/models/User";
 
 const JWT_SECRET_STRING =
   process.env.JWT_SECRET || "agent_eod_super_secret_jwt_key_2026_xyz";
@@ -18,31 +18,26 @@ export interface TokenPayload {
 }
 
 /**
- * Hash a plain text password using Node.js crypto scrypt
+ * Direct plain-text password verification (Raw password as requested)
  */
-export function hashPassword(password: string): { hash: string; salt: string } {
-  const salt = crypto.randomBytes(16).toString("hex");
-  const hash = crypto.scryptSync(password, salt, 64).toString("hex");
-  return { hash, salt };
-}
-
-/**
- * Verify a plain text password against stored hash & salt
- */
-export function verifyPassword(
-  password: string,
-  storedHash: string,
-  salt: string
-): boolean {
-  try {
-    const testHash = crypto.scryptSync(password, salt, 64).toString("hex");
-    return crypto.timingSafeEqual(
-      Buffer.from(storedHash, "hex"),
-      Buffer.from(testHash, "hex")
-    );
-  } catch {
-    return false;
+export function verifyPassword(enteredPassword: string, user: IUser): boolean {
+  // If plain text password is saved
+  if (user.password) {
+    return enteredPassword === user.password;
   }
+  // Fallback for any legacy hashed records
+  if (user.passwordHash && user.salt) {
+    try {
+      const testHash = crypto.scryptSync(enteredPassword, user.salt, 64).toString("hex");
+      return crypto.timingSafeEqual(
+        Buffer.from(user.passwordHash, "hex"),
+        Buffer.from(testHash, "hex")
+      );
+    } catch {
+      return false;
+    }
+  }
+  return false;
 }
 
 /**
@@ -78,7 +73,6 @@ export async function verifyToken(token: string): Promise<TokenPayload | null> {
  * Returns today's date formatted as YYYY-MM-DD in Asia/Kolkata timezone
  */
 export function getTodayDateString(): string {
-  // Use Indian Standard Time by default or system timezone
   const now = new Date();
   const options: Intl.DateTimeFormatOptions = {
     timeZone: "Asia/Kolkata",
@@ -86,33 +80,35 @@ export function getTodayDateString(): string {
     month: "2-digit",
     day: "2-digit",
   };
-  const formatter = new Intl.DateTimeFormat("en-CA", options); // en-CA gives YYYY-MM-DD format
+  const formatter = new Intl.DateTimeFormat("en-CA", options);
   return formatter.format(now);
 }
 
 /**
- * Ensure default admin exists in the database
+ * Ensure default admin exists in the database with raw password
  */
 export async function seedAdminIfEmpty() {
   await connectDB();
+  const defaultEmail = (
+    process.env.DEFAULT_ADMIN_EMAIL || "admin@eod.com"
+  ).toLowerCase().trim();
+  const defaultPassword = process.env.DEFAULT_ADMIN_PASSWORD || "admin123";
+
   const existingAdmin = await User.findOne({ role: "admin" });
   if (!existingAdmin) {
-    const defaultEmail = (
-      process.env.DEFAULT_ADMIN_EMAIL || "admin@eod.com"
-    ).toLowerCase().trim();
-    const defaultPassword = process.env.DEFAULT_ADMIN_PASSWORD || "admin123";
-    const { hash, salt } = hashPassword(defaultPassword);
-
     await User.create({
       name: "Super Admin",
       email: defaultEmail,
-      passwordHash: hash,
-      salt: salt,
+      password: defaultPassword, // Raw password
       role: "admin",
       phone: "9999999999",
       isActive: true,
     });
-    console.log(`[Seed] Initial Admin created: ${defaultEmail} / ${defaultPassword}`);
+    console.log(`[Seed] Initial Admin created with raw password: ${defaultEmail} / ${defaultPassword}`);
+  } else if (!existingAdmin.password) {
+    // If existing admin had hash, update to raw password
+    existingAdmin.password = defaultPassword;
+    await existingAdmin.save();
   }
 }
 
@@ -125,18 +121,15 @@ export async function getCurrentUser(
   let token: string | undefined;
 
   if (request) {
-    // 1. Check Authorization Bearer header
     const authHeader = request.headers.get("authorization");
     if (authHeader && authHeader.startsWith("Bearer ")) {
       token = authHeader.substring(7).trim();
     }
-    // 2. Check cookies from request
     if (!token) {
       token = request.cookies.get("eod_token")?.value;
     }
   }
 
-  // 3. Fallback to next/headers cookies() (async in Next.js 15+)
   if (!token) {
     try {
       const cookieStore = await cookies();

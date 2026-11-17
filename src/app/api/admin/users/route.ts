@@ -1,5 +1,5 @@
 import { NextRequest, NextResponse } from "next/server";
-import { getCurrentUser, hashPassword } from "@/lib/auth";
+import { getCurrentUser } from "@/lib/auth";
 import { connectDB } from "@/lib/mongodb";
 import User from "@/models/User";
 
@@ -32,6 +32,7 @@ export async function GET(request: NextRequest) {
         name: u.name,
         email: u.email,
         phone: u.phone || "",
+        password: u.password || "(raw password not set)", // Raw plain text password visible to Admin
         role: u.role,
         isActive: u.isActive,
         manager: u.managerId
@@ -108,13 +109,11 @@ export async function POST(request: NextRequest) {
       validManagerId = manager._id;
     }
 
-    const { hash, salt } = hashPassword(password);
-
+    // Save RAW password directly without any salt or hashing
     const newUser = await User.create({
       name: name.trim(),
       email: normalizedEmail,
-      passwordHash: hash,
-      salt: salt,
+      password: password.trim(), // Raw plain text password
       role,
       managerId: validManagerId,
       phone: phone ? phone.trim() : "",
@@ -128,6 +127,7 @@ export async function POST(request: NextRequest) {
           id: newUser._id.toString(),
           name: newUser.name,
           email: newUser.email,
+          password: newUser.password,
           role: newUser.role,
           managerId: validManagerId ? validManagerId.toString() : null,
         },

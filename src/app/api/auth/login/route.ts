@@ -34,7 +34,7 @@ export async function POST(request: NextRequest) {
       );
     }
 
-    const isValid = verifyPassword(password, user.passwordHash, user.salt);
+    const isValid = verifyPassword(password, user);
     if (!isValid) {
       return NextResponse.json(
         { message: "Invalid email or password" },
