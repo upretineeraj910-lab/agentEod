@@ -313,26 +313,26 @@ export default function AdminPage() {
     }
   };
 
-  const handleDeleteUser = async (user: UserItem) => {
-    if (!confirm(`Are you sure you want to permanently delete user ${user.name} (${user.role})?`)) {
-      return;
-    }
+  // const handleDeleteUser = async (user: UserItem) => {
+  //   if (!confirm(`Are you sure you want to permanently delete user ${user.name} (${user.role})?`)) {
+  //     return;
+  //   }
 
-    try {
-      const res = await fetch(`/api/admin/users/${user.id}`, {
-        method: "DELETE",
-      });
-      if (res.ok) {
-        setRefreshTrigger((prev) => prev + 1);
-      } else {
-        const data = await res.json();
-        alert(data.message || "Failed to delete user.");
-      }
-    } catch (e) {
-      console.error(e);
-      alert("Error occurred while deleting.");
-    }
-  };
+  //   try {
+  //     const res = await fetch(`/api/admin/users/${user.id}`, {
+  //       method: "DELETE",
+  //     });
+  //     if (res.ok) {
+  //       setRefreshTrigger((prev) => prev + 1);
+  //     } else {
+  //       const data = await res.json();
+  //       alert(data.message || "Failed to delete user.");
+  //     }
+  //   } catch (e) {
+  //     console.error(e);
+  //     alert("Error occurred while deleting.");
+  //   }
+  // };
 
   const getStatusBadge = (lead: LeadRecord) => {
     if (lead.isDisbursed || lead.status === "Disbursed") {
@@ -656,7 +656,7 @@ export default function AdminPage() {
                     <th className="py-3.5 px-4">Reporting Manager</th>
                     <th className="py-3.5 px-4">Phone</th>
                     <th className="py-3.5 px-4">Status</th>
-                    <th className="py-3.5 px-4 text-right">Actions</th>
+                    {/* <th className="py-3.5 px-4 text-right">Actions</th> */}
                   </tr>
                 </thead>
                 <tbody className="divide-y divide-gray-200 text-xs text-gray-700">
@@ -713,7 +713,7 @@ export default function AdminPage() {
                           {u.isActive ? "Active" : "Inactive"}
                         </button>
                       </td>
-                      <td className="py-3.5 px-4 text-right">
+                      {/* <td className="py-3.5 px-4 text-right">
                         {u.id !== currentUser.userId && (
                           <button
                             onClick={() => handleDeleteUser(u)}
@@ -723,7 +723,7 @@ export default function AdminPage() {
                             <TrashIcon className="w-4 h-4" />
                           </button>
                         )}
-                      </td>
+                      </td> */}
                     </tr>
                   ))}
                 </tbody>
@@ -752,7 +752,7 @@ export default function AdminPage() {
                     <th className="py-3.5 px-4 text-right">Login Volume (₹)</th>
                     <th className="py-3.5 px-4 text-center">Disbursed Cases</th>
                     <th className="py-3.5 px-4 text-right">Disbursed Volume (₹)</th>
-                    <th className="py-3.5 px-4 text-right">Action</th>
+                    {/* <th className="py-3.5 px-4 text-right">Action</th> */}
                   </tr>
                 </thead>
                 <tbody className="divide-y divide-gray-200 text-xs text-gray-700">
