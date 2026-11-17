@@ -584,7 +584,7 @@ export default function AdminPage() {
                     <th className="py-3.5 px-4">Reporting Manager</th>
                     <th className="py-3.5 px-4">Phone</th>
                     <th className="py-3.5 px-4">Status</th>
-                    <th className="py-3.5 px-4 text-right">Actions</th>
+                    {/* <th className="py-3.5 px-4 text-right">Actions</th> */}
                   </tr>
                 </thead>
                 <tbody className="divide-y divide-gray-200 text-xs text-gray-700">
@@ -641,7 +641,7 @@ export default function AdminPage() {
                           {u.isActive ? "Active" : "Inactive"}
                         </button>
                       </td>
-                      <td className="py-3.5 px-4 text-right">
+                      {/* <td className="py-3.5 px-4 text-right">
                         {u.id !== currentUser.userId && (
                           <button
                             onClick={() => handleDeleteUser(u)}
@@ -651,7 +651,7 @@ export default function AdminPage() {
                             <TrashIcon className="w-4 h-4" />
                           </button>
                         )}
-                      </td>
+                      </td> */}
                     </tr>
                   ))}
                 </tbody>
