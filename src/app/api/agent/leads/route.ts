@@ -8,13 +8,14 @@ export async function GET(request: NextRequest) {
   try {
     const session = await getCurrentUser(request);
     if (!session || session.role !== "agent") {
-      return NextResponse.json({ message: "Forbidden: Agent access only" }, { status: 403 });
+      return NextResponse.json({ message: "Unauthorized. Agent access only." }, { status: 403 });
     }
 
     await connectDB();
     const { searchParams } = new URL(request.url);
     const date = searchParams.get("date"); // e.g. YYYY-MM-DD
     const followUpOnly = searchParams.get("followUpOnly") === "true";
+    const disbursedOnly = searchParams.get("disbursedOnly") === "true";
     const search = searchParams.get("search")?.trim();
 
     const today = getTodayDateString();
@@ -22,8 +23,9 @@ export async function GET(request: NextRequest) {
       agentId: session.userId,
     };
 
-    if (followUpOnly) {
-      // Leads that have a follow-up date set
+    if (disbursedOnly) {
+      query.$or = [{ isDisbursed: true }, { status: "Disbursed" }];
+    } else if (followUpOnly) {
       query.followUpDate = { $ne: null };
     } else if (date) {
       query.date = date;
@@ -36,6 +38,7 @@ export async function GET(request: NextRequest) {
         { company: { $regex: search, $options: "i" } },
         { requirement: { $regex: search, $options: "i" } },
         { bankName: { $regex: search, $options: "i" } },
+        { disbursedBank: { $regex: search, $options: "i" } },
       ];
     }
 
@@ -47,6 +50,18 @@ export async function GET(request: NextRequest) {
     const todayLogins = todayLeads.filter((l) => l.isSentForLogin).length;
     const todayLoginAmount = todayLeads.reduce(
       (sum, l) => sum + (l.isSentForLogin && l.loginAmount ? l.loginAmount : 0),
+      0
+    );
+
+    const todayDisbursed = todayLeads.filter((l) => l.isDisbursed || l.status === "Disbursed").length;
+    const todayDisbursedAmount = todayLeads.reduce(
+      (sum, l) =>
+        sum +
+        ((l.isDisbursed || l.status === "Disbursed") && l.disbursedAmount
+          ? l.disbursedAmount
+          : (l.isDisbursed || l.status === "Disbursed") && l.loginAmount
+          ? l.loginAmount
+          : 0),
       0
     );
 
@@ -62,6 +77,8 @@ export async function GET(request: NextRequest) {
         totalLeadsToday: todayTotalLeads,
         totalLoginsToday: todayLogins,
         totalLoginAmountToday: todayLoginAmount,
+        totalDisbursedToday: todayDisbursed,
+        totalDisbursedAmountToday: todayDisbursedAmount,
         todayFollowUps,
       },
       leads: leads.map((l) => ({
@@ -77,6 +94,10 @@ export async function GET(request: NextRequest) {
         isSentForLogin: l.isSentForLogin,
         bankName: l.bankName || "",
         loginAmount: l.loginAmount || 0,
+        isDisbursed: Boolean(l.isDisbursed || l.status === "Disbursed"),
+        disbursedBank: l.disbursedBank || l.bankName || "",
+        disbursedAmount: l.disbursedAmount || (l.status === "Disbursed" ? l.loginAmount : 0),
+        disbursedDate: l.disbursedDate || null,
         status: l.status,
         remarks: l.remarks || "",
         isToday: l.date === today,
@@ -96,7 +117,7 @@ export async function POST(request: NextRequest) {
   try {
     const session = await getCurrentUser(request);
     if (!session || session.role !== "agent") {
-      return NextResponse.json({ message: "Forbidden: Agent access only" }, { status: 403 });
+      return NextResponse.json({ message: "Unauthorized. Agent access only." }, { status: 403 });
     }
 
     const body = await request.json();
@@ -111,6 +132,10 @@ export async function POST(request: NextRequest) {
       isSentForLogin,
       bankName,
       loginAmount,
+      isDisbursed,
+      disbursedBank,
+      disbursedAmount,
+      disbursedDate,
       status,
       remarks,
     } = body;
@@ -135,11 +160,19 @@ export async function POST(request: NextRequest) {
     // Get agent's current assigned manager
     const agentUser = await User.findById(session.userId);
     if (!agentUser || !agentUser.isActive) {
-      return NextResponse.json({ message: "Agent account invalid or inactive." }, { status: 401 });
+      return NextResponse.json({ message: "Agent account is inactive or not found." }, { status: 401 });
     }
 
     // Force date to strictly be today's date!
     const today = getTodayDateString();
+
+    const determinedStatus = status
+      ? status.trim()
+      : isDisbursed
+      ? "Disbursed"
+      : isSentForLogin
+      ? "Sent For Login"
+      : "In Discussion";
 
     const newLead = await Lead.create({
       agentId: agentUser._id,
@@ -152,16 +185,20 @@ export async function POST(request: NextRequest) {
       requirement: requirement.trim(),
       followUpDate: followUpDate ? followUpDate.trim() : null,
       followUpTime: followUpTime ? followUpTime.trim() : null,
-      isSentForLogin: Boolean(isSentForLogin),
+      isSentForLogin: Boolean(isSentForLogin || determinedStatus === "Sent For Login" || determinedStatus === "Disbursed"),
       bankName: isSentForLogin && bankName ? bankName.trim() : null,
       loginAmount: isSentForLogin && loginAmount ? Number(loginAmount) : null,
-      status: status ? status.trim() : isSentForLogin ? "Sent For Login" : "In Discussion",
+      isDisbursed: Boolean(isDisbursed || determinedStatus === "Disbursed"),
+      disbursedBank: disbursedBank ? disbursedBank.trim() : bankName ? bankName.trim() : null,
+      disbursedAmount: disbursedAmount ? Number(disbursedAmount) : determinedStatus === "Disbursed" && loginAmount ? Number(loginAmount) : null,
+      disbursedDate: disbursedDate ? disbursedDate.trim() : determinedStatus === "Disbursed" ? today : null,
+      status: determinedStatus,
       remarks: remarks ? remarks.trim() : "",
     });
 
     return NextResponse.json(
       {
-        message: "EOD lead entry added successfully for today",
+        message: "EOD lead entry submitted successfully.",
         lead: {
           id: newLead._id.toString(),
           date: newLead.date,
@@ -175,6 +212,9 @@ export async function POST(request: NextRequest) {
           isSentForLogin: newLead.isSentForLogin,
           bankName: newLead.bankName,
           loginAmount: newLead.loginAmount,
+          isDisbursed: newLead.isDisbursed,
+          disbursedBank: newLead.disbursedBank,
+          disbursedAmount: newLead.disbursedAmount,
           status: newLead.status,
           remarks: newLead.remarks,
         },

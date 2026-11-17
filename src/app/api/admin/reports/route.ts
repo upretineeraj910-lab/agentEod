@@ -8,7 +8,7 @@ export async function GET(request: NextRequest) {
   try {
     const session = await getCurrentUser(request);
     if (!session || session.role !== "admin") {
-      return NextResponse.json({ message: "Forbidden: Admin access only" }, { status: 403 });
+      return NextResponse.json({ message: "Forbidden: Admin access only." }, { status: 403 });
     }
 
     await connectDB();
@@ -20,6 +20,7 @@ export async function GET(request: NextRequest) {
     const agentId = searchParams.get("agentId");
     const search = searchParams.get("search")?.trim();
     const followUpOnly = searchParams.get("followUpOnly") === "true";
+    const disbursedOnly = searchParams.get("disbursedOnly") === "true";
 
     const today = getTodayDateString();
 
@@ -39,7 +40,6 @@ export async function GET(request: NextRequest) {
     if (agentId) {
       query.agentId = agentId;
     } else if (managerId) {
-      // Find all agents under this manager
       const teamAgentIds = allAgents
         .filter((a) => {
           const mId = (a.managerId as unknown as { _id?: { toString(): string } })?._id || a.managerId;
@@ -50,7 +50,9 @@ export async function GET(request: NextRequest) {
       query.agentId = { $in: teamAgentIds };
     }
 
-    if (followUpOnly) {
+    if (disbursedOnly) {
+      query.$or = [{ isDisbursed: true }, { status: "Disbursed" }];
+    } else if (followUpOnly) {
       query.followUpDate = { $ne: null };
     } else if (startDate && endDate) {
       query.date = { $gte: startDate, $lte: endDate };
@@ -65,6 +67,7 @@ export async function GET(request: NextRequest) {
         { company: { $regex: search, $options: "i" } },
         { requirement: { $regex: search, $options: "i" } },
         { bankName: { $regex: search, $options: "i" } },
+        { disbursedBank: { $regex: search, $options: "i" } },
       ];
     }
 
@@ -77,6 +80,8 @@ export async function GET(request: NextRequest) {
     let totalLeads = 0;
     let totalLogins = 0;
     let totalLoginAmount = 0;
+    let totalDisbursed = 0;
+    let totalDisbursedAmount = 0;
     let todayFollowUps = 0;
 
     // Structure Manager-wise aggregation
@@ -90,6 +95,8 @@ export async function GET(request: NextRequest) {
         leadsCount: number;
         loginsCount: number;
         loginAmount: number;
+        disbursedCount: number;
+        disbursedAmount: number;
       }
     > = {};
 
@@ -107,6 +114,8 @@ export async function GET(request: NextRequest) {
         leadsCount: 0,
         loginsCount: 0,
         loginAmount: 0,
+        disbursedCount: 0,
+        disbursedAmount: 0,
       };
     }
 
@@ -120,6 +129,8 @@ export async function GET(request: NextRequest) {
         leadsCount: number;
         loginsCount: number;
         loginAmount: number;
+        disbursedCount: number;
+        disbursedAmount: number;
       }
     > = {};
 
@@ -132,6 +143,8 @@ export async function GET(request: NextRequest) {
         leadsCount: 0,
         loginsCount: 0,
         loginAmount: 0,
+        disbursedCount: 0,
+        disbursedAmount: 0,
       };
     }
 
@@ -139,10 +152,17 @@ export async function GET(request: NextRequest) {
       totalLeads += 1;
       const isLogin = Boolean(l.isSentForLogin);
       const amount = isLogin && l.loginAmount ? Number(l.loginAmount) : 0;
+      const isDisbursed = Boolean(l.isDisbursed || l.status === "Disbursed");
+      const disbAmount = isDisbursed && l.disbursedAmount ? Number(l.disbursedAmount) : isDisbursed && l.loginAmount ? Number(l.loginAmount) : 0;
 
       if (isLogin) {
         totalLogins += 1;
         totalLoginAmount += amount;
+      }
+
+      if (isDisbursed) {
+        totalDisbursed += 1;
+        totalDisbursedAmount += disbAmount;
       }
 
       if (l.followUpDate === today) {
@@ -162,6 +182,10 @@ export async function GET(request: NextRequest) {
           agentMap[aId].loginsCount += 1;
           agentMap[aId].loginAmount += amount;
         }
+        if (isDisbursed) {
+          agentMap[aId].disbursedCount += 1;
+          agentMap[aId].disbursedAmount += disbAmount;
+        }
       }
 
       // Manager attribution
@@ -176,6 +200,10 @@ export async function GET(request: NextRequest) {
           managerMap[mId].loginsCount += 1;
           managerMap[mId].loginAmount += amount;
         }
+        if (isDisbursed) {
+          managerMap[mId].disbursedCount += 1;
+          managerMap[mId].disbursedAmount += disbAmount;
+        }
       }
     }
 
@@ -185,6 +213,8 @@ export async function GET(request: NextRequest) {
         totalLeads,
         totalLogins,
         totalLoginAmount,
+        totalDisbursed,
+        totalDisbursedAmount,
         todayFollowUps,
         totalManagers: allManagers.length,
         totalAgents: allAgents.length,
@@ -215,6 +245,10 @@ export async function GET(request: NextRequest) {
           isSentForLogin: l.isSentForLogin,
           bankName: l.bankName || "",
           loginAmount: l.loginAmount || 0,
+          isDisbursed: Boolean(l.isDisbursed || l.status === "Disbursed"),
+          disbursedBank: l.disbursedBank || l.bankName || "",
+          disbursedAmount: l.disbursedAmount || (l.status === "Disbursed" ? l.loginAmount : 0),
+          disbursedDate: l.disbursedDate || null,
           status: l.status,
           remarks: l.remarks || "",
           agentName: agentData?.name || "Unknown Agent",

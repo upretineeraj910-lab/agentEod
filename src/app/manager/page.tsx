@@ -4,10 +4,8 @@ import React, { useState, useEffect } from "react";
 import { useRouter } from "next/navigation";
 import Navbar from "@/components/Navbar";
 import {
-  UsersIcon,
   PhoneIcon,
   BuildingIcon,
-  IndianRupeeIcon,
   CalendarIcon,
   ClockIcon,
   CheckCircleIcon,
@@ -24,6 +22,8 @@ interface AgentSummary {
   leadsCount: number;
   loginsCount: number;
   loginAmount: number;
+  disbursedCount: number;
+  disbursedAmount: number;
 }
 
 interface LeadRecord {
@@ -39,6 +39,10 @@ interface LeadRecord {
   isSentForLogin: boolean;
   bankName: string;
   loginAmount: number;
+  isDisbursed: boolean;
+  disbursedBank: string;
+  disbursedAmount: number;
+  disbursedDate: string | null;
   status: string;
   remarks: string;
   agent: {
@@ -64,7 +68,7 @@ export default function ManagerPage() {
   const [selectedDate, setSelectedDate] = useState<string>("");
   const [selectedAgentId, setSelectedAgentId] = useState<string>("");
   const [searchQuery, setSearchQuery] = useState<string>("");
-  const [activeTab, setActiveTab] = useState<"leads" | "agents" | "followups">("leads");
+  const [activeTab, setActiveTab] = useState<"leads" | "disbursed" | "agents" | "followups">("leads");
   const [refreshTrigger, setRefreshTrigger] = useState<number>(0);
 
   // Data
@@ -76,6 +80,8 @@ export default function ManagerPage() {
     totalLeads: 0,
     totalLogins: 0,
     totalLoginAmount: 0,
+    totalDisbursed: 0,
+    totalDisbursedAmount: 0,
     todayFollowUps: 0,
     teamSize: 0,
   });
@@ -132,6 +138,7 @@ export default function ManagerPage() {
         if (selectedAgentId) params.append("agentId", selectedAgentId);
         if (searchQuery.trim()) params.append("search", searchQuery.trim());
         if (activeTab === "followups") params.append("followUpOnly", "true");
+        if (activeTab === "disbursed") params.append("disbursedOnly", "true");
 
         const res = await fetch(`/api/manager/reports?${params.toString()}`);
         if (res.ok) {
@@ -178,37 +185,92 @@ export default function ManagerPage() {
       "Sent For Login": l.isSentForLogin ? "YES" : "NO",
       "Bank Name": l.bankName || "",
       "Login Amount": l.loginAmount || 0,
+      "Is Disbursed": l.isDisbursed ? "YES" : "NO",
+      "Disbursed Bank": l.disbursedBank || "",
+      "Disbursed Amount": l.disbursedAmount || 0,
       Status: l.status,
       Remarks: l.remarks || "",
     }));
 
-    exportToCSV(exportData, `team-eod-report-${selectedDate || todayDate}.csv`);
+    exportToCSV(exportData, `team-eod-report-${selectedDate || todayDate || "all"}.csv`);
+  };
+
+  const getStatusBadge = (lead: LeadRecord) => {
+    if (lead.isDisbursed || lead.status === "Disbursed") {
+      return (
+        <span className="inline-flex items-center gap-1 px-2.5 py-1 rounded-full text-[11px] font-bold bg-emerald-100 text-emerald-800 border border-emerald-200">
+          <CheckCircleIcon className="w-3.5 h-3.5 text-emerald-700" />
+          DISBURSED
+        </span>
+      );
+    }
+    if (lead.isSentForLogin || lead.status === "Sent For Login") {
+      return (
+        <span className="inline-flex items-center gap-1 px-2.5 py-1 rounded-full text-[11px] font-bold bg-blue-100 text-blue-800 border border-blue-200">
+          <BuildingIcon className="w-3.5 h-3.5 text-blue-700" />
+          LOGIN SENT
+        </span>
+      );
+    }
+    if (lead.status === "Approved") {
+      return (
+        <span className="inline-flex items-center px-2.5 py-1 rounded-full text-[11px] font-semibold bg-teal-100 text-teal-800">
+          Approved
+        </span>
+      );
+    }
+    if (lead.status === "Follow Up") {
+      return (
+        <span className="inline-flex items-center px-2.5 py-1 rounded-full text-[11px] font-semibold bg-amber-100 text-amber-800">
+          Follow Up
+        </span>
+      );
+    }
+    if (lead.status === "Documents Pending") {
+      return (
+        <span className="inline-flex items-center px-2.5 py-1 rounded-full text-[11px] font-semibold bg-orange-100 text-orange-800">
+          Docs Pending
+        </span>
+      );
+    }
+    if (lead.status === "Rejected") {
+      return (
+        <span className="inline-flex items-center px-2.5 py-1 rounded-full text-[11px] font-semibold bg-rose-100 text-rose-800">
+          Rejected
+        </span>
+      );
+    }
+    return (
+      <span className="inline-flex items-center px-2.5 py-1 rounded-full text-[11px] font-semibold bg-gray-100 text-gray-700">
+        {lead.status || "In Discussion"}
+      </span>
+    );
   };
 
   if (!currentUser) {
     return (
       <div className="min-h-screen bg-gray-50 flex items-center justify-center">
-        <div className="text-gray-500 font-medium">Loading Manager Portal...</div>
+        <div className="text-gray-500 font-medium text-sm">Loading Manager Portal...</div>
       </div>
     );
   }
 
   return (
-    <div className="min-h-screen bg-gray-50 flex flex-col">
+    <div className="min-h-screen bg-slate-50 flex flex-col">
       <Navbar user={currentUser} />
 
       <main className="flex-1 max-w-7xl w-full mx-auto px-4 sm:px-6 lg:px-8 py-8">
-        {/* Top Header Card */}
-        <div className="bg-white rounded-2xl shadow-xs border border-gray-200 p-6 mb-8 flex flex-col md:flex-row md:items-center justify-between gap-4">
+        {/* Executive Header Banner */}
+        <div className="bg-white rounded-2xl shadow-xs border border-gray-200/80 p-6 mb-8 flex flex-col md:flex-row md:items-center justify-between gap-4">
           <div>
             <div className="flex items-center gap-2.5">
-              <span className="w-3 h-3 rounded-full bg-blue-600"></span>
+              <span className="w-2.5 h-2.5 rounded-full bg-blue-600 ring-4 ring-blue-100"></span>
               <h1 className="text-2xl font-bold text-gray-900 tracking-tight">
-                Manager Team Portal
+                Manager Team Operations & EOD
               </h1>
             </div>
-            <p className="mt-1 text-sm text-gray-500">
-              Review your agents&apos; daily EOD submissions, bank logins, and client follow-ups.
+            <p className="mt-1 text-xs sm:text-sm text-gray-500">
+              Team performance analytics, bank login tracking, and loan disbursal overview.
             </p>
           </div>
 
@@ -223,85 +285,80 @@ export default function ManagerPage() {
           </div>
         </div>
 
-        {/* Stats Grid */}
-        <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-5 mb-8">
-          <div className="bg-white p-5 rounded-2xl border border-gray-200 shadow-xs">
-            <div className="flex items-center justify-between">
-              <span className="text-xs font-semibold text-gray-500 uppercase tracking-wider">
-                Team Leads
-              </span>
-              <div className="p-2 rounded-xl bg-blue-50 text-blue-600">
-                <UsersIcon className="w-5 h-5" />
-              </div>
-            </div>
-            <p className="text-2xl font-bold text-gray-900 mt-2">
+        {/* 5-Card Executive Summary */}
+        <div className="grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-5 gap-4 mb-8">
+          <div className="bg-white p-4 sm:p-5 rounded-2xl border border-gray-200/80 shadow-xs">
+            <span className="text-[11px] font-bold text-gray-500 uppercase tracking-wider block">
+              Team Leads
+            </span>
+            <p className="text-2xl font-extrabold text-gray-900 mt-2">
               {summary.totalLeads}
             </p>
-            <span className="text-xs text-gray-500 mt-1 block">
-              In selected view ({summary.teamSize} active agents)
+            <span className="text-[11px] text-gray-400 mt-1 block">
+              {summary.teamSize} Reporting Agents
             </span>
           </div>
 
-          <div className="bg-white p-5 rounded-2xl border border-gray-200 shadow-xs">
-            <div className="flex items-center justify-between">
-              <span className="text-xs font-semibold text-gray-500 uppercase tracking-wider">
-                Total Files Logged
-              </span>
-              <div className="p-2 rounded-xl bg-emerald-50 text-emerald-600">
-                <CheckCircleIcon className="w-5 h-5" />
-              </div>
-            </div>
-            <p className="text-2xl font-bold text-emerald-600 mt-2">
+          <div className="bg-white p-4 sm:p-5 rounded-2xl border border-gray-200/80 shadow-xs">
+            <span className="text-[11px] font-bold text-blue-600 uppercase tracking-wider block">
+              Logins Sent
+            </span>
+            <p className="text-2xl font-extrabold text-blue-700 mt-2">
               {summary.totalLogins}
             </p>
-            <span className="text-xs text-gray-500 mt-1 block">
-              Bank logins sent by team
+            <span className="text-[11px] text-gray-400 mt-1 block">
+              Files logged into banks
             </span>
           </div>
 
-          <div className="bg-white p-5 rounded-2xl border border-gray-200 shadow-xs">
-            <div className="flex items-center justify-between">
-              <span className="text-xs font-semibold text-gray-500 uppercase tracking-wider">
-                Team Login Volume
-              </span>
-              <div className="p-2 rounded-xl bg-indigo-50 text-indigo-600">
-                <IndianRupeeIcon className="w-5 h-5" />
-              </div>
-            </div>
-            <p className="text-2xl font-bold text-gray-900 mt-2">
+          <div className="bg-white p-4 sm:p-5 rounded-2xl border border-gray-200/80 shadow-xs">
+            <span className="text-[11px] font-bold text-gray-500 uppercase tracking-wider block">
+              Login Volume (₹)
+            </span>
+            <p className="text-xl sm:text-2xl font-extrabold text-gray-900 mt-2">
               {formatINR(summary.totalLoginAmount)}
             </p>
-            <span className="text-xs text-gray-500 mt-1 block">
-              Total volume across all banks
+            <span className="text-[11px] text-gray-400 mt-1 block">
+              Total volume submitted
             </span>
           </div>
 
-          <div className="bg-white p-5 rounded-2xl border border-gray-200 shadow-xs">
-            <div className="flex items-center justify-between">
-              <span className="text-xs font-semibold text-gray-500 uppercase tracking-wider">
-                Follow-ups Due Today
+          <div className="bg-gradient-to-br from-emerald-50 to-teal-50/50 p-4 sm:p-5 rounded-2xl border border-emerald-200/90 shadow-xs">
+            <span className="text-[11px] font-bold text-emerald-800 uppercase tracking-wider block flex items-center justify-between">
+              <span>Disbursed Volume</span>
+              <span className="px-1.5 py-0.5 rounded-full bg-emerald-200/80 text-emerald-900 text-[10px]">
+                {summary.totalDisbursed} Cases
               </span>
-              <div className="p-2 rounded-xl bg-amber-50 text-amber-600">
-                <ClockIcon className="w-5 h-5" />
-              </div>
-            </div>
-            <p className="text-2xl font-bold text-amber-600 mt-2">
+            </span>
+            <p className="text-xl sm:text-2xl font-extrabold text-emerald-800 mt-2">
+              {formatINR(summary.totalDisbursedAmount)}
+            </p>
+            <span className="text-[11px] text-emerald-700 mt-1 block font-medium">
+              Loan value disbursed
+            </span>
+          </div>
+
+          <div className="bg-white p-4 sm:p-5 rounded-2xl border border-gray-200/80 shadow-xs col-span-2 sm:col-span-1">
+            <span className="text-[11px] font-bold text-amber-600 uppercase tracking-wider block">
+              Follow-ups Today
+            </span>
+            <p className="text-2xl font-extrabold text-amber-600 mt-2">
               {summary.todayFollowUps}
             </p>
-            <span className="text-xs text-gray-500 mt-1 block">
-              Clients scheduled for today
+            <span className="text-[11px] text-gray-400 mt-1 block">
+              Due for team contact
             </span>
           </div>
         </div>
 
         {/* Filter Toolbar */}
-        <div className="bg-white rounded-2xl shadow-xs border border-gray-200 mb-6 p-4">
+        <div className="bg-white rounded-2xl shadow-xs border border-gray-200/80 mb-6 p-4">
           <div className="flex flex-col lg:flex-row lg:items-center justify-between gap-4">
             {/* Tabs */}
-            <div className="flex items-center gap-2">
+            <div className="flex items-center gap-2 overflow-x-auto pb-2 lg:pb-0">
               <button
                 onClick={() => setActiveTab("leads")}
-                className={`px-4 py-2 rounded-xl font-semibold text-sm transition ${
+                className={`px-4 py-2 rounded-xl font-bold text-xs sm:text-sm whitespace-nowrap transition ${
                   activeTab === "leads"
                     ? "bg-blue-600 text-white shadow-xs"
                     : "text-gray-600 hover:bg-gray-100"
@@ -311,22 +368,34 @@ export default function ManagerPage() {
               </button>
 
               <button
+                onClick={() => setActiveTab("disbursed")}
+                className={`px-4 py-2 rounded-xl font-bold text-xs sm:text-sm whitespace-nowrap transition flex items-center gap-1.5 ${
+                  activeTab === "disbursed"
+                    ? "bg-emerald-600 text-white shadow-xs"
+                    : "text-gray-600 hover:bg-gray-100"
+                }`}
+              >
+                <CheckCircleIcon className="w-4 h-4" />
+                Disbursals ({summary.totalDisbursed})
+              </button>
+
+              <button
                 onClick={() => setActiveTab("agents")}
-                className={`px-4 py-2 rounded-xl font-semibold text-sm transition flex items-center gap-1.5 ${
+                className={`px-4 py-2 rounded-xl font-bold text-xs sm:text-sm whitespace-nowrap transition flex items-center gap-1.5 ${
                   activeTab === "agents"
                     ? "bg-blue-600 text-white shadow-xs"
                     : "text-gray-600 hover:bg-gray-100"
                 }`}
               >
                 <BriefcaseIcon className="w-4 h-4" />
-                Agent-wise Breakdown
+                Agent Performance
               </button>
 
               <button
                 onClick={() => setActiveTab("followups")}
-                className={`px-4 py-2 rounded-xl font-semibold text-sm transition flex items-center gap-1.5 ${
+                className={`px-4 py-2 rounded-xl font-bold text-xs sm:text-sm whitespace-nowrap transition flex items-center gap-1.5 ${
                   activeTab === "followups"
-                    ? "bg-blue-600 text-white shadow-xs"
+                    ? "bg-amber-600 text-white shadow-xs"
                     : "text-gray-600 hover:bg-gray-100"
                 }`}
               >
@@ -337,7 +406,6 @@ export default function ManagerPage() {
 
             {/* Filter Inputs */}
             <div className="flex flex-wrap items-center gap-3">
-              {/* Date Filter */}
               <div className="flex items-center gap-1.5">
                 <span className="text-xs font-semibold text-gray-500">Date:</span>
                 <input
@@ -356,7 +424,6 @@ export default function ManagerPage() {
                 )}
               </div>
 
-              {/* Agent Filter */}
               <div className="flex items-center gap-1.5">
                 <span className="text-xs font-semibold text-gray-500">Agent:</span>
                 <select
@@ -364,7 +431,7 @@ export default function ManagerPage() {
                   onChange={(e) => setSelectedAgentId(e.target.value)}
                   className="px-3 py-1.5 border border-gray-300 rounded-lg text-xs text-gray-800 focus:outline-none focus:ring-2 focus:ring-blue-500 bg-white"
                 >
-                  <option value="">All My Agents</option>
+                  <option value="">All Team Agents</option>
                   {teamAgents.map((ag) => (
                     <option key={ag.id} value={ag.id}>
                       {ag.name}
@@ -373,7 +440,6 @@ export default function ManagerPage() {
                 </select>
               </div>
 
-              {/* Search */}
               <form onSubmit={handleSearchSubmit} className="flex items-center gap-2">
                 <div className="relative">
                   <input
@@ -398,30 +464,31 @@ export default function ManagerPage() {
 
         {/* Content based on Active Tab */}
         {activeTab === "agents" ? (
-          /* Agent-wise Breakdown Grid / Table */
-          <div className="bg-white rounded-2xl shadow-xs border border-gray-200 overflow-hidden">
+          <div className="bg-white rounded-2xl shadow-xs border border-gray-200/80 overflow-hidden">
             <div className="p-4 border-b border-gray-100">
               <h2 className="text-base font-bold text-gray-900">
-                Team Performance Breakdown ({selectedDate || "All Time"})
+                Agent-wise Performance Breakdown ({selectedDate || "All Time"})
               </h2>
             </div>
             <div className="overflow-x-auto">
               <table className="w-full text-left border-collapse">
                 <thead>
-                  <tr className="bg-gray-50/80 border-b border-gray-200 text-[11px] font-bold text-gray-600 uppercase tracking-wider">
+                  <tr className="bg-gray-50/90 border-b border-gray-200 text-[11px] font-bold text-gray-600 uppercase tracking-wider">
                     <th className="py-3.5 px-4">Agent Name</th>
                     <th className="py-3.5 px-4">Contact</th>
                     <th className="py-3.5 px-4 text-center">Total Leads</th>
                     <th className="py-3.5 px-4 text-center">Logins Sent</th>
                     <th className="py-3.5 px-4 text-right">Login Volume (₹)</th>
+                    <th className="py-3.5 px-4 text-center">Disbursed Cases</th>
+                    <th className="py-3.5 px-4 text-right">Disbursed Volume (₹)</th>
                     <th className="py-3.5 px-4 text-right">Action</th>
                   </tr>
                 </thead>
                 <tbody className="divide-y divide-gray-200 text-xs text-gray-700">
                   {agentSummaries.length === 0 ? (
                     <tr>
-                      <td colSpan={6} className="py-12 text-center text-gray-500">
-                        No agents assigned to your team yet. Please ask Admin to assign agents to you.
+                      <td colSpan={8} className="py-12 text-center text-gray-500">
+                        No agents currently assigned to your team. Please contact the administrator.
                       </td>
                     </tr>
                   ) : (
@@ -433,16 +500,24 @@ export default function ManagerPage() {
                         <td className="py-3.5 px-4 text-gray-500">
                           {ag.agentPhone || "-"}
                         </td>
-                        <td className="py-3.5 px-4 text-center font-semibold text-gray-900">
+                        <td className="py-3.5 px-4 text-center font-bold text-gray-900">
                           {ag.leadsCount}
                         </td>
                         <td className="py-3.5 px-4 text-center">
-                          <span className="px-2 py-1 rounded-full bg-emerald-100 text-emerald-800 font-bold text-[11px]">
+                          <span className="px-2.5 py-0.5 rounded-full bg-blue-100 text-blue-800 font-bold text-[11px]">
                             {ag.loginsCount}
                           </span>
                         </td>
-                        <td className="py-3.5 px-4 text-right font-bold text-indigo-700">
+                        <td className="py-3.5 px-4 text-right font-bold text-blue-900">
                           {formatINR(ag.loginAmount)}
+                        </td>
+                        <td className="py-3.5 px-4 text-center">
+                          <span className="px-2.5 py-0.5 rounded-full bg-emerald-100 text-emerald-800 font-bold text-[11px]">
+                            {ag.disbursedCount}
+                          </span>
+                        </td>
+                        <td className="py-3.5 px-4 text-right font-bold text-emerald-800">
+                          {formatINR(ag.disbursedAmount)}
                         </td>
                         <td className="py-3.5 px-4 text-right">
                           <button
@@ -463,33 +538,33 @@ export default function ManagerPage() {
             </div>
           </div>
         ) : (
-          /* Leads List / Follow-up list */
-          <div className="bg-white rounded-2xl shadow-xs border border-gray-200 overflow-hidden">
+          <div className="bg-white rounded-2xl shadow-xs border border-gray-200/80 overflow-hidden">
             <div className="overflow-x-auto">
               <table className="w-full text-left border-collapse">
                 <thead>
-                  <tr className="bg-gray-50/80 border-b border-gray-200 text-[11px] font-bold text-gray-600 uppercase tracking-wider">
+                  <tr className="bg-gray-50/90 border-b border-gray-200 text-[11px] font-bold text-gray-600 uppercase tracking-wider">
                     <th className="py-3.5 px-4">Date</th>
                     <th className="py-3.5 px-4">Agent</th>
                     <th className="py-3.5 px-4">Client Details</th>
-                    <th className="py-3.5 px-4">Company & Salary</th>
+                    <th className="py-3.5 px-4">Company & Income</th>
                     <th className="py-3.5 px-4">Requirement</th>
+                    <th className="py-3.5 px-4">Status & Pipeline</th>
+                    <th className="py-3.5 px-4">Bank & Amount</th>
                     <th className="py-3.5 px-4">Follow-up</th>
-                    <th className="py-3.5 px-4">Login Status</th>
                     <th className="py-3.5 px-4">Remarks</th>
                   </tr>
                 </thead>
-                <tbody className="divide-y divide-gray-200 text-xs text-gray-700">
+                <tbody className="divide-y divide-gray-200/80 text-xs text-gray-700">
                   {loading ? (
                     <tr>
-                      <td colSpan={8} className="py-12 text-center text-gray-500">
-                        Loading team leads...
+                      <td colSpan={9} className="py-12 text-center text-gray-500">
+                        Loading team pipeline records...
                       </td>
                     </tr>
                   ) : leads.length === 0 ? (
                     <tr>
-                      <td colSpan={8} className="py-12 text-center text-gray-500">
-                        No leads found matching current filters.
+                      <td colSpan={9} className="py-12 text-center text-gray-500">
+                        No records found matching current criteria.
                       </td>
                     </tr>
                   ) : (
@@ -499,74 +574,78 @@ export default function ManagerPage() {
                           {lead.date}
                         </td>
                         <td className="py-3.5 px-4 whitespace-nowrap">
-                          <span className="font-semibold text-gray-900 block">
+                          <span className="font-bold text-gray-900 block">
                             {lead.agent?.name || "Agent"}
                           </span>
-                          <span className="text-[11px] text-gray-500">
+                          <span className="text-[11px] text-gray-500 font-medium">
                             {lead.agent?.phone || ""}
                           </span>
                         </td>
                         <td className="py-3.5 px-4">
-                          <div className="font-semibold text-gray-900">
+                          <div className="font-bold text-gray-900">
                             {lead.clientName}
                           </div>
-                          <div className="text-gray-500 flex items-center gap-1 mt-0.5">
+                          <div className="text-gray-500 flex items-center gap-1 mt-0.5 font-medium">
                             <PhoneIcon className="w-3.5 h-3.5 text-gray-400" />
                             <span>{lead.clientPhone}</span>
                           </div>
                         </td>
                         <td className="py-3.5 px-4">
-                          <div className="font-medium text-gray-900 flex items-center gap-1">
+                          <div className="font-semibold text-gray-900 flex items-center gap-1">
                             <BuildingIcon className="w-3.5 h-3.5 text-gray-400" />
                             <span>{lead.company}</span>
                           </div>
-                          <div className="text-gray-500 mt-0.5">
+                          <div className="text-gray-500 mt-0.5 font-medium">
                             Salary: {formatINR(lead.salary)}/mo
                           </div>
                         </td>
                         <td className="py-3.5 px-4 max-w-xs">
-                          <div className="font-medium text-gray-900">
+                          <div className="font-semibold text-gray-900">
                             {lead.requirement}
                           </div>
-                          <span className="inline-block mt-1 px-2 py-0.5 rounded-md bg-gray-100 text-gray-700 text-[10px] font-medium">
-                            {lead.status}
-                          </span>
+                        </td>
+                        <td className="py-3.5 px-4 whitespace-nowrap">
+                          {getStatusBadge(lead)}
+                        </td>
+                        <td className="py-3.5 px-4 whitespace-nowrap">
+                          {lead.isDisbursed || lead.status === "Disbursed" ? (
+                            <div className="p-2 rounded-xl bg-emerald-50 border border-emerald-200">
+                              <span className="font-bold text-[10px] uppercase text-emerald-800 block">
+                                Disbursed: {lead.disbursedBank || lead.bankName || "Bank"}
+                              </span>
+                              <span className="text-emerald-900 font-extrabold text-xs block mt-0.5">
+                                {formatINR(lead.disbursedAmount || lead.loginAmount)}
+                              </span>
+                            </div>
+                          ) : lead.isSentForLogin || lead.status === "Sent For Login" ? (
+                            <div className="p-2 rounded-xl bg-blue-50 border border-blue-200">
+                              <span className="font-bold text-[10px] uppercase text-blue-800 block">
+                                Login: {lead.bankName || "Bank"}
+                              </span>
+                              <span className="text-blue-900 font-extrabold text-xs block mt-0.5">
+                                {formatINR(lead.loginAmount)}
+                              </span>
+                            </div>
+                          ) : (
+                            <span className="text-gray-400 font-medium">-</span>
+                          )}
                         </td>
                         <td className="py-3.5 px-4 whitespace-nowrap">
                           {lead.followUpDate ? (
                             <div>
-                              <div className="font-semibold text-amber-700 flex items-center gap-1">
-                                <CalendarIcon className="w-3.5 h-3.5" />
+                              <div className="font-bold text-amber-700 flex items-center gap-1">
+                                <CalendarIcon className="w-3.5 h-3.5 text-amber-600" />
                                 <span>{lead.followUpDate}</span>
                               </div>
                               {lead.followUpTime && (
-                                <div className="text-[11px] text-gray-500 flex items-center gap-1 mt-0.5">
-                                  <ClockIcon className="w-3 h-3" />
+                                <div className="text-[11px] text-gray-500 flex items-center gap-1 mt-0.5 font-medium">
+                                  <ClockIcon className="w-3 h-3 text-gray-400" />
                                   <span>{lead.followUpTime}</span>
                                 </div>
                               )}
                             </div>
                           ) : (
                             <span className="text-gray-400">None</span>
-                          )}
-                        </td>
-                        <td className="py-3.5 px-4">
-                          {lead.isSentForLogin ? (
-                            <div className="p-2 rounded-lg bg-emerald-50 border border-emerald-200">
-                              <span className="font-bold text-emerald-800 block text-[11px]">
-                                SENT FOR LOGIN
-                              </span>
-                              <div className="text-gray-800 font-semibold mt-0.5">
-                                {lead.bankName}
-                              </div>
-                              <div className="text-emerald-700 font-bold">
-                                {formatINR(lead.loginAmount)}
-                              </div>
-                            </div>
-                          ) : (
-                            <span className="px-2 py-1 rounded-md bg-gray-100 text-gray-600 text-[11px] font-medium">
-                              Not Sent
-                            </span>
                           )}
                         </td>
                         <td className="py-3.5 px-4 text-gray-600 max-w-xs truncate" title={lead.remarks}>

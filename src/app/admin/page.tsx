@@ -7,7 +7,6 @@ import {
   UsersIcon,
   PhoneIcon,
   BuildingIcon,
-  IndianRupeeIcon,
   CalendarIcon,
   ClockIcon,
   CheckCircleIcon,
@@ -28,6 +27,8 @@ interface ManagerTeamSummary {
   leadsCount: number;
   loginsCount: number;
   loginAmount: number;
+  disbursedCount: number;
+  disbursedAmount: number;
 }
 
 interface AgentPerformance {
@@ -37,6 +38,8 @@ interface AgentPerformance {
   leadsCount: number;
   loginsCount: number;
   loginAmount: number;
+  disbursedCount: number;
+  disbursedAmount: number;
 }
 
 interface LeadRecord {
@@ -52,6 +55,10 @@ interface LeadRecord {
   isSentForLogin: boolean;
   bankName: string;
   loginAmount: number;
+  isDisbursed: boolean;
+  disbursedBank: string;
+  disbursedAmount: number;
+  disbursedDate: string | null;
   status: string;
   remarks: string;
   agentName: string;
@@ -86,8 +93,8 @@ export default function AdminPage() {
   const [currentUser, setCurrentUser] = useState<UserSession | null>(null);
   const [loading, setLoading] = useState<boolean>(true);
 
-  // Tabs: 'leads' | 'teams' | 'agents' | 'users'
-  const [activeTab, setActiveTab] = useState<"leads" | "teams" | "agents" | "users">("leads");
+  // Tabs: 'leads' | 'disbursed' | 'teams' | 'agents' | 'users'
+  const [activeTab, setActiveTab] = useState<"leads" | "disbursed" | "teams" | "agents" | "users">("leads");
 
   // Filter States
   const [selectedDate, setSelectedDate] = useState<string>("");
@@ -107,6 +114,8 @@ export default function AdminPage() {
     totalLeads: 0,
     totalLogins: 0,
     totalLoginAmount: 0,
+    totalDisbursed: 0,
+    totalDisbursedAmount: 0,
     todayFollowUps: 0,
     totalManagers: 0,
     totalAgents: 0,
@@ -174,6 +183,7 @@ export default function AdminPage() {
         if (selectedManagerId) params.append("managerId", selectedManagerId);
         if (selectedAgentId) params.append("agentId", selectedAgentId);
         if (searchQuery.trim()) params.append("search", searchQuery.trim());
+        if (activeTab === "disbursed") params.append("disbursedOnly", "true");
 
         const repRes = await fetch(`/api/admin/reports?${params.toString()}`);
         if (repRes.ok) {
@@ -198,7 +208,7 @@ export default function AdminPage() {
     return () => {
       active = false;
     };
-  }, [currentUser, selectedDate, selectedManagerId, selectedAgentId, searchQuery, refreshTrigger]);
+  }, [currentUser, selectedDate, selectedManagerId, selectedAgentId, searchQuery, activeTab, refreshTrigger]);
 
   const handleSearchSubmit = (e: React.FormEvent) => {
     e.preventDefault();
@@ -220,6 +230,9 @@ export default function AdminPage() {
       "Sent For Login": l.isSentForLogin ? "YES" : "NO",
       "Bank Name": l.bankName || "",
       "Login Amount": l.loginAmount || 0,
+      "Is Disbursed": l.isDisbursed ? "YES" : "NO",
+      "Disbursed Bank": l.disbursedBank || "",
+      "Disbursed Amount": l.disbursedAmount || 0,
       Status: l.status,
       Remarks: l.remarks || "",
     }));
@@ -243,12 +256,12 @@ export default function AdminPage() {
     setModalError(null);
 
     if (!modalName.trim() || !modalEmail.trim() || !modalPassword.trim() || !modalRole) {
-      setModalError("Please fill all required fields.");
+      setModalError("Please complete all required fields.");
       return;
     }
 
     if (modalRole === "agent" && !modalManagerId) {
-      setModalError("Please select a Manager for this Agent. (Ganesh Sir / System requires agent to report to a manager).");
+      setModalError("Please select a reporting Manager for this Agent.");
       return;
     }
 
@@ -276,7 +289,7 @@ export default function AdminPage() {
 
       setIsUserModalOpen(false);
       setRefreshTrigger((prev) => prev + 1);
-      alert(`${modalRole.toUpperCase()} ID created successfully!`);
+      alert(`${modalRole.toUpperCase()} account created successfully.`);
     } catch (err) {
       console.error(err);
       setModalError("Server connection error.");
@@ -321,30 +334,82 @@ export default function AdminPage() {
     }
   };
 
+  const getStatusBadge = (lead: LeadRecord) => {
+    if (lead.isDisbursed || lead.status === "Disbursed") {
+      return (
+        <span className="inline-flex items-center gap-1 px-2.5 py-1 rounded-full text-[11px] font-bold bg-emerald-100 text-emerald-800 border border-emerald-200">
+          <CheckCircleIcon className="w-3.5 h-3.5 text-emerald-700" />
+          DISBURSED
+        </span>
+      );
+    }
+    if (lead.isSentForLogin || lead.status === "Sent For Login") {
+      return (
+        <span className="inline-flex items-center gap-1 px-2.5 py-1 rounded-full text-[11px] font-bold bg-blue-100 text-blue-800 border border-blue-200">
+          <BuildingIcon className="w-3.5 h-3.5 text-blue-700" />
+          LOGIN SENT
+        </span>
+      );
+    }
+    if (lead.status === "Approved") {
+      return (
+        <span className="inline-flex items-center px-2.5 py-1 rounded-full text-[11px] font-semibold bg-teal-100 text-teal-800">
+          Approved
+        </span>
+      );
+    }
+    if (lead.status === "Follow Up") {
+      return (
+        <span className="inline-flex items-center px-2.5 py-1 rounded-full text-[11px] font-semibold bg-amber-100 text-amber-800">
+          Follow Up
+        </span>
+      );
+    }
+    if (lead.status === "Documents Pending") {
+      return (
+        <span className="inline-flex items-center px-2.5 py-1 rounded-full text-[11px] font-semibold bg-orange-100 text-orange-800">
+          Docs Pending
+        </span>
+      );
+    }
+    if (lead.status === "Rejected") {
+      return (
+        <span className="inline-flex items-center px-2.5 py-1 rounded-full text-[11px] font-semibold bg-rose-100 text-rose-800">
+          Rejected
+        </span>
+      );
+    }
+    return (
+      <span className="inline-flex items-center px-2.5 py-1 rounded-full text-[11px] font-semibold bg-gray-100 text-gray-700">
+        {lead.status || "In Discussion"}
+      </span>
+    );
+  };
+
   if (!currentUser) {
     return (
       <div className="min-h-screen bg-gray-50 flex items-center justify-center">
-        <div className="text-gray-500 font-medium">Loading Superadmin Portal...</div>
+        <div className="text-gray-500 font-medium text-sm">Loading Administration Portal...</div>
       </div>
     );
   }
 
   return (
-    <div className="min-h-screen bg-gray-50 flex flex-col">
+    <div className="min-h-screen bg-slate-50 flex flex-col">
       <Navbar user={currentUser} />
 
       <main className="flex-1 max-w-7xl w-full mx-auto px-4 sm:px-6 lg:px-8 py-8">
-        {/* Top Header Card */}
-        <div className="bg-white rounded-2xl shadow-xs border border-gray-200 p-6 mb-8 flex flex-col md:flex-row md:items-center justify-between gap-4">
+        {/* Executive Header Card */}
+        <div className="bg-white rounded-2xl shadow-xs border border-gray-200/80 p-6 mb-8 flex flex-col md:flex-row md:items-center justify-between gap-4">
           <div>
             <div className="flex items-center gap-2.5">
-              <span className="w-3 h-3 rounded-full bg-purple-600"></span>
+              <span className="w-2.5 h-2.5 rounded-full bg-purple-600 ring-4 ring-purple-100"></span>
               <h1 className="text-2xl font-bold text-gray-900 tracking-tight">
-                Superadmin Control Center
+                Executive Administration & Operations
               </h1>
             </div>
-            <p className="mt-1 text-sm text-gray-500">
-              Manage all Managers & Agents, monitor team-wise logins, and review individual lead pipelines.
+            <p className="mt-1 text-xs sm:text-sm text-gray-500">
+              Company-wide sales pipeline, manager team performance, and loan disbursal analytics.
             </p>
           </div>
 
@@ -354,7 +419,7 @@ export default function AdminPage() {
               className="inline-flex items-center gap-2 px-4 py-2.5 bg-purple-600 hover:bg-purple-700 text-white rounded-xl font-semibold text-sm shadow-xs transition"
             >
               <PlusIcon className="w-4 h-4" />
-              <span>Create Manager / Agent ID</span>
+              <span>Create User Account</span>
             </button>
 
             <button
@@ -367,84 +432,79 @@ export default function AdminPage() {
           </div>
         </div>
 
-        {/* Stats Grid */}
-        <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-5 mb-8">
-          <div className="bg-white p-5 rounded-2xl border border-gray-200 shadow-xs">
-            <div className="flex items-center justify-between">
-              <span className="text-xs font-semibold text-gray-500 uppercase tracking-wider">
-                Total Leads Logged
-              </span>
-              <div className="p-2 rounded-xl bg-purple-50 text-purple-600">
-                <UsersIcon className="w-5 h-5" />
-              </div>
-            </div>
-            <p className="text-2xl font-bold text-gray-900 mt-2">
+        {/* 5-Card High Impact Executive KPI Grid */}
+        <div className="grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-5 gap-4 mb-8">
+          <div className="bg-white p-4 sm:p-5 rounded-2xl border border-gray-200/80 shadow-xs">
+            <span className="text-[11px] font-bold text-purple-700 uppercase tracking-wider block">
+              Total Leads Logged
+            </span>
+            <p className="text-2xl font-extrabold text-gray-900 mt-2">
               {summary.totalLeads}
             </p>
-            <span className="text-xs text-gray-500 mt-1 block">
-              {summary.totalManagers} Managers | {summary.totalAgents} Agents
+            <span className="text-[11px] text-gray-400 mt-1 block">
+              {summary.totalManagers} Managers • {summary.totalAgents} Agents
             </span>
           </div>
 
-          <div className="bg-white p-5 rounded-2xl border border-gray-200 shadow-xs">
-            <div className="flex items-center justify-between">
-              <span className="text-xs font-semibold text-gray-500 uppercase tracking-wider">
-                Total Files Sent For Login
-              </span>
-              <div className="p-2 rounded-xl bg-emerald-50 text-emerald-600">
-                <CheckCircleIcon className="w-5 h-5" />
-              </div>
-            </div>
-            <p className="text-2xl font-bold text-emerald-600 mt-2">
+          <div className="bg-white p-4 sm:p-5 rounded-2xl border border-gray-200/80 shadow-xs">
+            <span className="text-[11px] font-bold text-blue-600 uppercase tracking-wider block">
+              Files Sent For Login
+            </span>
+            <p className="text-2xl font-extrabold text-blue-700 mt-2">
               {summary.totalLogins}
             </p>
-            <span className="text-xs text-gray-500 mt-1 block">
-              Dispatched across all partner banks
+            <span className="text-[11px] text-gray-400 mt-1 block">
+              Dispatched across partner banks
             </span>
           </div>
 
-          <div className="bg-white p-5 rounded-2xl border border-gray-200 shadow-xs">
-            <div className="flex items-center justify-between">
-              <span className="text-xs font-semibold text-gray-500 uppercase tracking-wider">
-                Total Login Volume
-              </span>
-              <div className="p-2 rounded-xl bg-indigo-50 text-indigo-600">
-                <IndianRupeeIcon className="w-5 h-5" />
-              </div>
-            </div>
-            <p className="text-2xl font-bold text-gray-900 mt-2">
+          <div className="bg-white p-4 sm:p-5 rounded-2xl border border-gray-200/80 shadow-xs">
+            <span className="text-[11px] font-bold text-gray-500 uppercase tracking-wider block">
+              Total Login Volume (₹)
+            </span>
+            <p className="text-xl sm:text-2xl font-extrabold text-gray-900 mt-2">
               {formatINR(summary.totalLoginAmount)}
             </p>
-            <span className="text-xs text-gray-500 mt-1 block">
-              Cumulative loan value requested
+            <span className="text-[11px] text-gray-400 mt-1 block">
+              Total loan value logged
             </span>
           </div>
 
-          <div className="bg-white p-5 rounded-2xl border border-gray-200 shadow-xs">
-            <div className="flex items-center justify-between">
-              <span className="text-xs font-semibold text-gray-500 uppercase tracking-wider">
-                Follow-ups Scheduled Today
+          <div className="bg-gradient-to-br from-emerald-50 to-teal-50/50 p-4 sm:p-5 rounded-2xl border border-emerald-200/90 shadow-xs">
+            <span className="text-[11px] font-bold text-emerald-800 uppercase tracking-wider block flex items-center justify-between">
+              <span>Disbursed Volume</span>
+              <span className="px-1.5 py-0.5 rounded-full bg-emerald-200/80 text-emerald-900 text-[10px]">
+                {summary.totalDisbursed} Cases
               </span>
-              <div className="p-2 rounded-xl bg-amber-50 text-amber-600">
-                <ClockIcon className="w-5 h-5" />
-              </div>
-            </div>
-            <p className="text-2xl font-bold text-amber-600 mt-2">
+            </span>
+            <p className="text-xl sm:text-2xl font-extrabold text-emerald-800 mt-2">
+              {formatINR(summary.totalDisbursedAmount)}
+            </p>
+            <span className="text-[11px] text-emerald-700 mt-1 block font-medium">
+              Loan value disbursed
+            </span>
+          </div>
+
+          <div className="bg-white p-4 sm:p-5 rounded-2xl border border-gray-200/80 shadow-xs col-span-2 sm:col-span-1">
+            <span className="text-[11px] font-bold text-amber-600 uppercase tracking-wider block">
+              Follow-ups Today
+            </span>
+            <p className="text-2xl font-extrabold text-amber-600 mt-2">
               {summary.todayFollowUps}
             </p>
-            <span className="text-xs text-gray-500 mt-1 block">
-              Cases due for follow-up today
+            <span className="text-[11px] text-gray-400 mt-1 block">
+              Pending client follow-ups
             </span>
           </div>
         </div>
 
         {/* Tab Toolbar */}
-        <div className="bg-white rounded-2xl shadow-xs border border-gray-200 mb-6 p-4">
+        <div className="bg-white rounded-2xl shadow-xs border border-gray-200/80 mb-6 p-4">
           <div className="flex flex-col lg:flex-row lg:items-center justify-between gap-4">
             <div className="flex items-center gap-2 overflow-x-auto pb-2 lg:pb-0">
               <button
                 onClick={() => setActiveTab("leads")}
-                className={`px-4 py-2 rounded-xl font-semibold text-sm whitespace-nowrap transition ${
+                className={`px-4 py-2 rounded-xl font-bold text-xs sm:text-sm whitespace-nowrap transition ${
                   activeTab === "leads"
                     ? "bg-purple-600 text-white shadow-xs"
                     : "text-gray-600 hover:bg-gray-100"
@@ -454,8 +514,20 @@ export default function AdminPage() {
               </button>
 
               <button
+                onClick={() => setActiveTab("disbursed")}
+                className={`px-4 py-2 rounded-xl font-bold text-xs sm:text-sm whitespace-nowrap transition flex items-center gap-1.5 ${
+                  activeTab === "disbursed"
+                    ? "bg-emerald-600 text-white shadow-xs"
+                    : "text-gray-600 hover:bg-gray-100"
+                }`}
+              >
+                <CheckCircleIcon className="w-4 h-4" />
+                Disbursals ({summary.totalDisbursed})
+              </button>
+
+              <button
                 onClick={() => setActiveTab("teams")}
-                className={`px-4 py-2 rounded-xl font-semibold text-sm whitespace-nowrap transition flex items-center gap-1.5 ${
+                className={`px-4 py-2 rounded-xl font-bold text-xs sm:text-sm whitespace-nowrap transition flex items-center gap-1.5 ${
                   activeTab === "teams"
                     ? "bg-purple-600 text-white shadow-xs"
                     : "text-gray-600 hover:bg-gray-100"
@@ -467,7 +539,7 @@ export default function AdminPage() {
 
               <button
                 onClick={() => setActiveTab("agents")}
-                className={`px-4 py-2 rounded-xl font-semibold text-sm whitespace-nowrap transition flex items-center gap-1.5 ${
+                className={`px-4 py-2 rounded-xl font-bold text-xs sm:text-sm whitespace-nowrap transition flex items-center gap-1.5 ${
                   activeTab === "agents"
                     ? "bg-purple-600 text-white shadow-xs"
                     : "text-gray-600 hover:bg-gray-100"
@@ -479,7 +551,7 @@ export default function AdminPage() {
 
               <button
                 onClick={() => setActiveTab("users")}
-                className={`px-4 py-2 rounded-xl font-semibold text-sm whitespace-nowrap transition flex items-center gap-1.5 ${
+                className={`px-4 py-2 rounded-xl font-bold text-xs sm:text-sm whitespace-nowrap transition flex items-center gap-1.5 ${
                   activeTab === "users"
                     ? "bg-purple-600 text-white shadow-xs"
                     : "text-gray-600 hover:bg-gray-100"
@@ -555,14 +627,14 @@ export default function AdminPage() {
 
         {/* View: User Directory */}
         {activeTab === "users" ? (
-          <div className="bg-white rounded-2xl shadow-xs border border-gray-200 overflow-hidden">
+          <div className="bg-white rounded-2xl shadow-xs border border-gray-200/80 overflow-hidden">
             <div className="p-4 border-b border-gray-100 flex items-center justify-between">
               <div>
                 <h2 className="text-base font-bold text-gray-900">
-                  User Directory (Admin, Managers & Agents)
+                  User Directory & Credentials
                 </h2>
                 <p className="text-xs text-gray-500">
-                  Only Admins can create and manage user credentials.
+                  Manage login accounts for Admin, Managers, and Agents. Passwords are saved in plain text for administrative assistance.
                 </p>
               </div>
               <button
@@ -576,7 +648,7 @@ export default function AdminPage() {
             <div className="overflow-x-auto">
               <table className="w-full text-left border-collapse">
                 <thead>
-                  <tr className="bg-gray-50/80 border-b border-gray-200 text-[11px] font-bold text-gray-600 uppercase tracking-wider">
+                  <tr className="bg-gray-50/90 border-b border-gray-200 text-[11px] font-bold text-gray-600 uppercase tracking-wider">
                     <th className="py-3.5 px-4">Name</th>
                     <th className="py-3.5 px-4">Email</th>
                     <th className="py-3.5 px-4">Password</th>
@@ -584,7 +656,7 @@ export default function AdminPage() {
                     <th className="py-3.5 px-4">Reporting Manager</th>
                     <th className="py-3.5 px-4">Phone</th>
                     <th className="py-3.5 px-4">Status</th>
-                    {/* <th className="py-3.5 px-4 text-right">Actions</th> */}
+                    <th className="py-3.5 px-4 text-right">Actions</th>
                   </tr>
                 </thead>
                 <tbody className="divide-y divide-gray-200 text-xs text-gray-700">
@@ -641,17 +713,17 @@ export default function AdminPage() {
                           {u.isActive ? "Active" : "Inactive"}
                         </button>
                       </td>
-                      {/* <td className="py-3.5 px-4 text-right">
+                      <td className="py-3.5 px-4 text-right">
                         {u.id !== currentUser.userId && (
                           <button
                             onClick={() => handleDeleteUser(u)}
                             title="Delete User"
-                            className="p-1.5 text-red-600 hover:text-red-800 hover:bg-red-50 rounded-lg transition"
+                            className="p-1.5 text-rose-600 hover:text-rose-800 hover:bg-rose-50 rounded-lg transition"
                           >
                             <TrashIcon className="w-4 h-4" />
                           </button>
                         )}
-                      </td> */}
+                      </td>
                     </tr>
                   ))}
                 </tbody>
@@ -659,34 +731,35 @@ export default function AdminPage() {
             </div>
           </div>
         ) : activeTab === "teams" ? (
-          /* View: Managers Team Breakdown */
-          <div className="bg-white rounded-2xl shadow-xs border border-gray-200 overflow-hidden">
+          <div className="bg-white rounded-2xl shadow-xs border border-gray-200/80 overflow-hidden">
             <div className="p-4 border-b border-gray-100">
               <h2 className="text-base font-bold text-gray-900">
                 Managers Team Overview ({selectedDate || "All Time"})
               </h2>
               <p className="text-xs text-gray-500">
-                Performance breakdown by Manager team. Click on any manager to filter leads.
+                Performance breakdown by reporting Manager. Filter leads by selecting any manager.
               </p>
             </div>
             <div className="overflow-x-auto">
               <table className="w-full text-left border-collapse">
                 <thead>
-                  <tr className="bg-gray-50/80 border-b border-gray-200 text-[11px] font-bold text-gray-600 uppercase tracking-wider">
+                  <tr className="bg-gray-50/90 border-b border-gray-200 text-[11px] font-bold text-gray-600 uppercase tracking-wider">
                     <th className="py-3.5 px-4">Manager Name</th>
                     <th className="py-3.5 px-4">Email</th>
                     <th className="py-3.5 px-4 text-center">Team Agents</th>
                     <th className="py-3.5 px-4 text-center">Total Leads</th>
-                    <th className="py-3.5 px-4 text-center">Files Sent For Login</th>
+                    <th className="py-3.5 px-4 text-center">Logins Sent</th>
                     <th className="py-3.5 px-4 text-right">Login Volume (₹)</th>
+                    <th className="py-3.5 px-4 text-center">Disbursed Cases</th>
+                    <th className="py-3.5 px-4 text-right">Disbursed Volume (₹)</th>
                     <th className="py-3.5 px-4 text-right">Action</th>
                   </tr>
                 </thead>
                 <tbody className="divide-y divide-gray-200 text-xs text-gray-700">
                   {managerTeams.length === 0 ? (
                     <tr>
-                      <td colSpan={7} className="py-12 text-center text-gray-500">
-                        No managers created yet. Click &quot;Create Manager / Agent ID&quot; to add one.
+                      <td colSpan={9} className="py-12 text-center text-gray-500">
+                        No manager accounts found. Click &quot;Create User Account&quot; to onboard managers.
                       </td>
                     </tr>
                   ) : (
@@ -705,12 +778,20 @@ export default function AdminPage() {
                           {m.leadsCount}
                         </td>
                         <td className="py-3.5 px-4 text-center">
-                          <span className="px-2 py-0.5 rounded-full bg-emerald-100 text-emerald-800 font-bold">
+                          <span className="px-2 py-0.5 rounded-full bg-blue-100 text-blue-800 font-bold">
                             {m.loginsCount}
                           </span>
                         </td>
-                        <td className="py-3.5 px-4 text-right font-bold text-indigo-700">
+                        <td className="py-3.5 px-4 text-right font-bold text-blue-900">
                           {formatINR(m.loginAmount)}
+                        </td>
+                        <td className="py-3.5 px-4 text-center">
+                          <span className="px-2 py-0.5 rounded-full bg-emerald-100 text-emerald-800 font-bold">
+                            {m.disbursedCount}
+                          </span>
+                        </td>
+                        <td className="py-3.5 px-4 text-right font-bold text-emerald-800">
+                          {formatINR(m.disbursedAmount)}
                         </td>
                         <td className="py-3.5 px-4 text-right">
                           <button
@@ -731,8 +812,7 @@ export default function AdminPage() {
             </div>
           </div>
         ) : activeTab === "agents" ? (
-          /* View: Individual Agent Performance */
-          <div className="bg-white rounded-2xl shadow-xs border border-gray-200 overflow-hidden">
+          <div className="bg-white rounded-2xl shadow-xs border border-gray-200/80 overflow-hidden">
             <div className="p-4 border-b border-gray-100">
               <h2 className="text-base font-bold text-gray-900">
                 Individual Agent Performance
@@ -741,20 +821,22 @@ export default function AdminPage() {
             <div className="overflow-x-auto">
               <table className="w-full text-left border-collapse">
                 <thead>
-                  <tr className="bg-gray-50/80 border-b border-gray-200 text-[11px] font-bold text-gray-600 uppercase tracking-wider">
+                  <tr className="bg-gray-50/90 border-b border-gray-200 text-[11px] font-bold text-gray-600 uppercase tracking-wider">
                     <th className="py-3.5 px-4">Agent Name</th>
                     <th className="py-3.5 px-4">Assigned Manager</th>
                     <th className="py-3.5 px-4 text-center">Total Leads</th>
-                    <th className="py-3.5 px-4 text-center">Files Sent For Login</th>
+                    <th className="py-3.5 px-4 text-center">Logins Sent</th>
                     <th className="py-3.5 px-4 text-right">Login Volume (₹)</th>
+                    <th className="py-3.5 px-4 text-center">Disbursed Cases</th>
+                    <th className="py-3.5 px-4 text-right">Disbursed Volume (₹)</th>
                     <th className="py-3.5 px-4 text-right">Action</th>
                   </tr>
                 </thead>
                 <tbody className="divide-y divide-gray-200 text-xs text-gray-700">
                   {agentPerformance.length === 0 ? (
                     <tr>
-                      <td colSpan={6} className="py-12 text-center text-gray-500">
-                        No agents found.
+                      <td colSpan={8} className="py-12 text-center text-gray-500">
+                        No agent accounts found.
                       </td>
                     </tr>
                   ) : (
@@ -770,12 +852,20 @@ export default function AdminPage() {
                           {ag.leadsCount}
                         </td>
                         <td className="py-3.5 px-4 text-center">
-                          <span className="px-2 py-0.5 rounded-full bg-emerald-100 text-emerald-800 font-bold">
+                          <span className="px-2 py-0.5 rounded-full bg-blue-100 text-blue-800 font-bold">
                             {ag.loginsCount}
                           </span>
                         </td>
-                        <td className="py-3.5 px-4 text-right font-bold text-indigo-700">
+                        <td className="py-3.5 px-4 text-right font-bold text-blue-900">
                           {formatINR(ag.loginAmount)}
+                        </td>
+                        <td className="py-3.5 px-4 text-center">
+                          <span className="px-2 py-0.5 rounded-full bg-emerald-100 text-emerald-800 font-bold">
+                            {ag.disbursedCount}
+                          </span>
+                        </td>
+                        <td className="py-3.5 px-4 text-right font-bold text-emerald-800">
+                          {formatINR(ag.disbursedAmount)}
                         </td>
                         <td className="py-3.5 px-4 text-right">
                           <button
@@ -796,33 +886,33 @@ export default function AdminPage() {
             </div>
           </div>
         ) : (
-          /* View: Full Leads Table */
-          <div className="bg-white rounded-2xl shadow-xs border border-gray-200 overflow-hidden">
+          <div className="bg-white rounded-2xl shadow-xs border border-gray-200/80 overflow-hidden">
             <div className="overflow-x-auto">
               <table className="w-full text-left border-collapse">
                 <thead>
-                  <tr className="bg-gray-50/80 border-b border-gray-200 text-[11px] font-bold text-gray-600 uppercase tracking-wider">
+                  <tr className="bg-gray-50/90 border-b border-gray-200 text-[11px] font-bold text-gray-600 uppercase tracking-wider">
                     <th className="py-3.5 px-4">Date</th>
                     <th className="py-3.5 px-4">Agent / Manager</th>
                     <th className="py-3.5 px-4">Client Details</th>
-                    <th className="py-3.5 px-4">Company & Salary</th>
+                    <th className="py-3.5 px-4">Company & Income</th>
                     <th className="py-3.5 px-4">Requirement</th>
+                    <th className="py-3.5 px-4">Status & Pipeline</th>
+                    <th className="py-3.5 px-4">Bank & Amount</th>
                     <th className="py-3.5 px-4">Follow-up</th>
-                    <th className="py-3.5 px-4">Login Status</th>
                     <th className="py-3.5 px-4">Remarks</th>
                   </tr>
                 </thead>
                 <tbody className="divide-y divide-gray-200 text-xs text-gray-700">
                   {loading ? (
                     <tr>
-                      <td colSpan={8} className="py-12 text-center text-gray-500">
-                        Loading lead records...
+                      <td colSpan={9} className="py-12 text-center text-gray-500">
+                        Loading pipeline records...
                       </td>
                     </tr>
                   ) : leads.length === 0 ? (
                     <tr>
-                      <td colSpan={8} className="py-12 text-center text-gray-500">
-                        No leads found matching current filters.
+                      <td colSpan={9} className="py-12 text-center text-gray-500">
+                        No records found matching current criteria.
                       </td>
                     </tr>
                   ) : (
@@ -832,74 +922,78 @@ export default function AdminPage() {
                           {lead.date}
                         </td>
                         <td className="py-3.5 px-4 whitespace-nowrap">
-                          <span className="font-semibold text-gray-900 block">
+                          <span className="font-bold text-gray-900 block">
                             {lead.agentName}
                           </span>
-                          <span className="text-[11px] text-gray-500 block">
+                          <span className="text-[11px] text-gray-500 block font-medium">
                             Mgr: {lead.managerName}
                           </span>
                         </td>
                         <td className="py-3.5 px-4">
-                          <div className="font-semibold text-gray-900">
+                          <div className="font-bold text-gray-900">
                             {lead.clientName}
                           </div>
-                          <div className="text-gray-500 flex items-center gap-1 mt-0.5">
+                          <div className="text-gray-500 flex items-center gap-1 mt-0.5 font-medium">
                             <PhoneIcon className="w-3.5 h-3.5 text-gray-400" />
                             <span>{lead.clientPhone}</span>
                           </div>
                         </td>
                         <td className="py-3.5 px-4">
-                          <div className="font-medium text-gray-900 flex items-center gap-1">
+                          <div className="font-semibold text-gray-900 flex items-center gap-1">
                             <BuildingIcon className="w-3.5 h-3.5 text-gray-400" />
                             <span>{lead.company}</span>
                           </div>
-                          <div className="text-gray-500 mt-0.5">
+                          <div className="text-gray-500 mt-0.5 font-medium">
                             Salary: {formatINR(lead.salary)}/mo
                           </div>
                         </td>
                         <td className="py-3.5 px-4 max-w-xs">
-                          <div className="font-medium text-gray-900">
+                          <div className="font-semibold text-gray-900">
                             {lead.requirement}
                           </div>
-                          <span className="inline-block mt-1 px-2 py-0.5 rounded-md bg-gray-100 text-gray-700 text-[10px] font-medium">
-                            {lead.status}
-                          </span>
+                        </td>
+                        <td className="py-3.5 px-4 whitespace-nowrap">
+                          {getStatusBadge(lead)}
+                        </td>
+                        <td className="py-3.5 px-4 whitespace-nowrap">
+                          {lead.isDisbursed || lead.status === "Disbursed" ? (
+                            <div className="p-2 rounded-xl bg-emerald-50 border border-emerald-200">
+                              <span className="font-bold text-[10px] uppercase text-emerald-800 block">
+                                Disbursed: {lead.disbursedBank || lead.bankName || "Bank"}
+                              </span>
+                              <span className="text-emerald-900 font-extrabold text-xs block mt-0.5">
+                                {formatINR(lead.disbursedAmount || lead.loginAmount)}
+                              </span>
+                            </div>
+                          ) : lead.isSentForLogin || lead.status === "Sent For Login" ? (
+                            <div className="p-2 rounded-xl bg-blue-50 border border-blue-200">
+                              <span className="font-bold text-[10px] uppercase text-blue-800 block">
+                                Login: {lead.bankName || "Bank"}
+                              </span>
+                              <span className="text-blue-900 font-extrabold text-xs block mt-0.5">
+                                {formatINR(lead.loginAmount)}
+                              </span>
+                            </div>
+                          ) : (
+                            <span className="text-gray-400 font-medium">-</span>
+                          )}
                         </td>
                         <td className="py-3.5 px-4 whitespace-nowrap">
                           {lead.followUpDate ? (
                             <div>
-                              <div className="font-semibold text-amber-700 flex items-center gap-1">
-                                <CalendarIcon className="w-3.5 h-3.5" />
+                              <div className="font-bold text-amber-700 flex items-center gap-1">
+                                <CalendarIcon className="w-3.5 h-3.5 text-amber-600" />
                                 <span>{lead.followUpDate}</span>
                               </div>
                               {lead.followUpTime && (
-                                <div className="text-[11px] text-gray-500 flex items-center gap-1 mt-0.5">
-                                  <ClockIcon className="w-3 h-3" />
+                                <div className="text-[11px] text-gray-500 flex items-center gap-1 mt-0.5 font-medium">
+                                  <ClockIcon className="w-3 h-3 text-gray-400" />
                                   <span>{lead.followUpTime}</span>
                                 </div>
                               )}
                             </div>
                           ) : (
                             <span className="text-gray-400">None</span>
-                          )}
-                        </td>
-                        <td className="py-3.5 px-4">
-                          {lead.isSentForLogin ? (
-                            <div className="p-2 rounded-lg bg-emerald-50 border border-emerald-200">
-                              <span className="font-bold text-emerald-800 block text-[11px]">
-                                SENT FOR LOGIN
-                              </span>
-                              <div className="text-gray-800 font-semibold mt-0.5">
-                                {lead.bankName}
-                              </div>
-                              <div className="text-emerald-700 font-bold">
-                                {formatINR(lead.loginAmount)}
-                              </div>
-                            </div>
-                          ) : (
-                            <span className="px-2 py-1 rounded-md bg-gray-100 text-gray-600 text-[11px] font-medium">
-                              Not Sent
-                            </span>
                           )}
                         </td>
                         <td className="py-3.5 px-4 text-gray-600 max-w-xs truncate" title={lead.remarks}>
@@ -917,14 +1011,19 @@ export default function AdminPage() {
 
       {/* Create User Modal */}
       {isUserModalOpen && (
-        <div className="fixed inset-0 z-50 overflow-y-auto bg-black/50 backdrop-blur-xs flex items-center justify-center p-4">
+        <div className="fixed inset-0 z-50 overflow-y-auto bg-black/60 backdrop-blur-xs flex items-center justify-center p-4">
           <div className="bg-white rounded-2xl max-w-md w-full p-6 sm:p-8 shadow-2xl border border-gray-200">
             <div className="flex items-center justify-between pb-4 border-b border-gray-100">
-              <h2 className="text-xl font-bold text-gray-900">
-                Create User Account
-              </h2>
-              <span className="text-xs bg-purple-100 text-purple-800 font-semibold px-2.5 py-1 rounded-full">
-                Admin Exclusive
+              <div>
+                <h2 className="text-xl font-bold text-gray-900">
+                  Create User Account
+                </h2>
+                <p className="text-xs text-gray-500 mt-0.5">
+                  Set up credentials for Managers and Agents.
+                </p>
+              </div>
+              <span className="text-xs bg-purple-100 text-purple-800 font-bold px-2.5 py-1 rounded-full">
+                Admin
               </span>
             </div>
 
@@ -943,7 +1042,7 @@ export default function AdminPage() {
                   <button
                     type="button"
                     onClick={() => setModalRole("agent")}
-                    className={`py-2 px-3 rounded-xl font-semibold text-xs border transition ${
+                    className={`py-2 px-3 rounded-xl font-bold text-xs border transition ${
                       modalRole === "agent"
                         ? "bg-purple-600 text-white border-purple-600 shadow-xs"
                         : "bg-white text-gray-700 border-gray-300 hover:bg-gray-50"
@@ -954,7 +1053,7 @@ export default function AdminPage() {
                   <button
                     type="button"
                     onClick={() => setModalRole("manager")}
-                    className={`py-2 px-3 rounded-xl font-semibold text-xs border transition ${
+                    className={`py-2 px-3 rounded-xl font-bold text-xs border transition ${
                       modalRole === "manager"
                         ? "bg-purple-600 text-white border-purple-600 shadow-xs"
                         : "bg-white text-gray-700 border-gray-300 hover:bg-gray-50"
@@ -972,17 +1071,17 @@ export default function AdminPage() {
                     Assign Reporting Manager *
                   </label>
                   {availableManagers.length === 0 ? (
-                    <div className="text-xs text-amber-700 font-medium">
-                      ⚠️ No managers available! Please create a Manager account first so agents can be assigned under them.
+                    <div className="text-xs text-amber-800 font-medium">
+                      Please create a Manager account first before onboarding Agents.
                     </div>
                   ) : (
                     <select
                       required
                       value={modalManagerId}
                       onChange={(e) => setModalManagerId(e.target.value)}
-                      className="w-full px-3 py-2 border border-blue-300 rounded-lg text-xs text-gray-900 bg-white focus:outline-none focus:ring-2 focus:ring-blue-500"
+                      className="w-full px-3 py-2 border border-blue-300 rounded-lg text-xs text-gray-900 bg-white focus:outline-none focus:ring-2 focus:ring-blue-500 font-medium"
                     >
-                      <option value="">-- Select Manager --</option>
+                      <option value="">-- Select Reporting Manager --</option>
                       {availableManagers.map((m) => (
                         <option key={m.id} value={m.id}>
                           {m.name} ({m.email})
@@ -991,7 +1090,7 @@ export default function AdminPage() {
                     </select>
                   )}
                   <p className="text-[11px] text-blue-700 mt-1">
-                    This agent will report to the selected manager.
+                    This agent will report under the selected manager.
                   </p>
                 </div>
               )}
@@ -1026,7 +1125,7 @@ export default function AdminPage() {
 
               <div>
                 <label className="block text-xs font-bold text-gray-700 mb-1">
-                  Phone Number
+                  Contact Phone Number
                 </label>
                 <input
                   type="tel"
@@ -1042,12 +1141,12 @@ export default function AdminPage() {
                   Password *
                 </label>
                 <input
-                  type="password"
+                  type="text"
                   required
-                  placeholder="Set initial password"
+                  placeholder="Set initial password (e.g. rahul123)"
                   value={modalPassword}
                   onChange={(e) => setModalPassword(e.target.value)}
-                  className="w-full px-3 py-2 border border-gray-300 rounded-xl text-xs text-gray-900 focus:outline-none focus:ring-2 focus:ring-purple-500"
+                  className="w-full px-3 py-2 border border-gray-300 rounded-xl text-xs text-gray-900 focus:outline-none focus:ring-2 focus:ring-purple-500 font-mono"
                 />
               </div>
 

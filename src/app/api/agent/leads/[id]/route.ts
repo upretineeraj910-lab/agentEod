@@ -10,7 +10,7 @@ export async function PUT(
   try {
     const session = await getCurrentUser(request);
     if (!session || session.role !== "agent") {
-      return NextResponse.json({ message: "Forbidden: Agent access only" }, { status: 403 });
+      return NextResponse.json({ message: "Unauthorized. Agent access only." }, { status: 403 });
     }
 
     const { id } = await context.params;
@@ -18,7 +18,7 @@ export async function PUT(
 
     const lead = await Lead.findById(id);
     if (!lead) {
-      return NextResponse.json({ message: "Lead not found" }, { status: 404 });
+      return NextResponse.json({ message: "Lead not found." }, { status: 404 });
     }
 
     // Verify ownership
@@ -32,7 +32,7 @@ export async function PUT(
       return NextResponse.json(
         {
           message:
-            "Aap purane din ka data update nahi kar sakte. Only today's records can be modified.",
+            "Record locked: Historical records from previous days cannot be modified. Only today's submissions are editable.",
         },
         { status: 403 }
       );
@@ -50,6 +50,10 @@ export async function PUT(
       isSentForLogin,
       bankName,
       loginAmount,
+      isDisbursed,
+      disbursedBank,
+      disbursedAmount,
+      disbursedDate,
       status,
       remarks,
     } = body;
@@ -79,13 +83,31 @@ export async function PUT(
       }
     }
 
+    if (typeof isDisbursed === "boolean") {
+      lead.isDisbursed = isDisbursed;
+      if (isDisbursed) {
+        lead.disbursedBank = disbursedBank ? disbursedBank.trim() : lead.bankName || "";
+        lead.disbursedAmount = disbursedAmount ? Number(disbursedAmount) : lead.loginAmount || 0;
+        lead.disbursedDate = disbursedDate ? disbursedDate.trim() : today;
+      } else {
+        lead.disbursedBank = null;
+        lead.disbursedAmount = null;
+        lead.disbursedDate = null;
+      }
+    } else if (status === "Disbursed") {
+      lead.isDisbursed = true;
+      lead.disbursedBank = disbursedBank ? disbursedBank.trim() : lead.bankName || "";
+      lead.disbursedAmount = disbursedAmount ? Number(disbursedAmount) : lead.loginAmount || 0;
+      lead.disbursedDate = disbursedDate ? disbursedDate.trim() : today;
+    }
+
     if (status) lead.status = status.trim();
     if (remarks !== undefined) lead.remarks = remarks.trim();
 
     await lead.save();
 
     return NextResponse.json({
-      message: "Lead updated successfully",
+      message: "Lead updated successfully.",
       lead,
     });
   } catch (error) {
@@ -104,7 +126,7 @@ export async function DELETE(
   try {
     const session = await getCurrentUser(request);
     if (!session || session.role !== "agent") {
-      return NextResponse.json({ message: "Forbidden: Agent access only" }, { status: 403 });
+      return NextResponse.json({ message: "Unauthorized. Agent access only." }, { status: 403 });
     }
 
     const { id } = await context.params;
@@ -112,7 +134,7 @@ export async function DELETE(
 
     const lead = await Lead.findById(id);
     if (!lead) {
-      return NextResponse.json({ message: "Lead not found" }, { status: 404 });
+      return NextResponse.json({ message: "Lead not found." }, { status: 404 });
     }
 
     if (lead.agentId.toString() !== session.userId) {
@@ -125,7 +147,7 @@ export async function DELETE(
       return NextResponse.json(
         {
           message:
-            "Aap purane din ka data delete nahi kar sakte. Only today's records can be modified.",
+            "Record locked: Historical records from previous days cannot be removed under EOD compliance policy.",
         },
         { status: 403 }
       );
@@ -133,7 +155,7 @@ export async function DELETE(
 
     await Lead.findByIdAndDelete(id);
 
-    return NextResponse.json({ message: "Lead deleted successfully" });
+    return NextResponse.json({ message: "Lead record deleted successfully." });
   } catch (error) {
     console.error("Agent delete lead error:", error);
     return NextResponse.json(

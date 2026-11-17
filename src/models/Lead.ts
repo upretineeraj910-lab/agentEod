@@ -14,7 +14,11 @@ export interface ILead extends Document {
   isSentForLogin: boolean;
   bankName?: string | null;
   loginAmount?: number | null;
-  status: string; // 'In Discussion' | 'Follow Up' | 'Sent For Login' | 'Logged In' | 'Approved' | 'Rejected'
+  isDisbursed: boolean;
+  disbursedBank?: string | null;
+  disbursedAmount?: number | null;
+  disbursedDate?: string | null;
+  status: string; // 'In Discussion' | 'Follow Up' | 'Documents Pending' | 'Sent For Login' | 'Approved' | 'Disbursed' | 'Rejected'
   remarks?: string;
   createdAt: Date;
   updatedAt: Date;
@@ -90,6 +94,26 @@ const LeadSchema = new Schema<ILead>(
       default: null,
       min: 0,
     },
+    isDisbursed: {
+      type: Boolean,
+      default: false,
+      index: true,
+    },
+    disbursedBank: {
+      type: String,
+      default: null,
+      trim: true,
+    },
+    disbursedAmount: {
+      type: Number,
+      default: null,
+      min: 0,
+    },
+    disbursedDate: {
+      type: String,
+      default: null,
+      trim: true,
+    },
     status: {
       type: String,
       default: "In Discussion",
@@ -109,6 +133,7 @@ const LeadSchema = new Schema<ILead>(
 // Composite indexes for common queries
 LeadSchema.index({ agentId: 1, date: 1 });
 LeadSchema.index({ managerId: 1, date: 1 });
+LeadSchema.index({ isDisbursed: 1 });
 
 const Lead: Model<ILead> =
   mongoose.models.Lead || mongoose.model<ILead>("Lead", LeadSchema);

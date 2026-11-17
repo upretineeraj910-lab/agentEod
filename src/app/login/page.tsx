@@ -2,7 +2,7 @@
 
 import React, { useState } from "react";
 import { useRouter } from "next/navigation";
-import { ShieldIcon, LockIcon } from "@/components/Icons";
+import { ShieldIcon } from "@/components/Icons";
 
 export default function LoginPage() {
   const router = useRouter();
@@ -57,13 +57,6 @@ export default function LoginPage() {
       setError("Unable to connect to server. Please check MongoDB connection.");
       setLoading(false);
     }
-  };
-
-  // Helper to fill default admin credentials for quick testing
-  const fillAdmin = () => {
-    setEmail("admin@eod.com");
-    setPassword("admin123");
-    setError(null);
   };
 
   return (
@@ -140,28 +133,6 @@ export default function LoginPage() {
               {loading ? "Authenticating..." : "Sign In to Portal"}
             </button>
           </form>
-
-          {/* First time / Quick Admin Access hint */}
-          {/* <div className="mt-6 pt-5 border-t border-gray-100">
-            <div className="bg-indigo-50/60 rounded-xl p-3 border border-indigo-100/70 text-xs text-indigo-900">
-              <div className="flex items-center justify-between mb-1">
-                <span className="font-semibold flex items-center gap-1">
-                  <LockIcon className="w-3.5 h-3.5 text-indigo-600" />
-                  Initial Superadmin Login:
-                </span>
-                <button
-                  type="button"
-                  onClick={fillAdmin}
-                  className="text-xs font-semibold text-indigo-700 hover:text-indigo-900 underline"
-                >
-                  Auto-fill
-                </button>
-              </div>
-              <p className="text-gray-600">
-                Email: <span className="font-mono text-gray-900">admin@eod.com</span> | Password: <span className="font-mono text-gray-900">admin123</span>
-              </p>
-            </div>
-          </div> */}
         </div>
       </div>
     </div>
