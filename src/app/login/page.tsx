@@ -142,7 +142,7 @@ export default function LoginPage() {
           </form>
 
           {/* First time / Quick Admin Access hint */}
-          <div className="mt-6 pt-5 border-t border-gray-100">
+          {/* <div className="mt-6 pt-5 border-t border-gray-100">
             <div className="bg-indigo-50/60 rounded-xl p-3 border border-indigo-100/70 text-xs text-indigo-900">
               <div className="flex items-center justify-between mb-1">
                 <span className="font-semibold flex items-center gap-1">
@@ -161,7 +161,7 @@ export default function LoginPage() {
                 Email: <span className="font-mono text-gray-900">admin@eod.com</span> | Password: <span className="font-mono text-gray-900">admin123</span>
               </p>
             </div>
-          </div>
+          </div> */}
         </div>
       </div>
     </div>
