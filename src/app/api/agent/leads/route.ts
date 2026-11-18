@@ -14,35 +14,81 @@ export async function GET(request: NextRequest) {
     await connectDB();
     const { searchParams } = new URL(request.url);
     const date = searchParams.get("date"); // e.g. YYYY-MM-DD
+    const startDate = searchParams.get("startDate"); // e.g. YYYY-MM-DD
+    const endDate = searchParams.get("endDate"); // e.g. YYYY-MM-DD
     const followUpOnly = searchParams.get("followUpOnly") === "true";
     const disbursedOnly = searchParams.get("disbursedOnly") === "true";
     const search = searchParams.get("search")?.trim();
 
     const today = getTodayDateString();
-    const query: Record<string, unknown> = {
-      agentId: session.userId,
-    };
+    const andClauses: Record<string, unknown>[] = [{ agentId: session.userId }];
+
+    // Build date filter (single date or range)
+    let dateFilter: unknown = null;
+    if (startDate && endDate) {
+      dateFilter = startDate === endDate ? startDate : { $gte: startDate, $lte: endDate };
+    } else if (startDate) {
+      dateFilter = { $gte: startDate };
+    } else if (endDate) {
+      dateFilter = { $lte: endDate };
+    } else if (date) {
+      dateFilter = date;
+    }
 
     if (disbursedOnly) {
-      query.$or = [{ isDisbursed: true }, { status: "Disbursed" }];
+      andClauses.push({
+        $or: [{ isDisbursed: true }, { status: "Disbursed" }],
+      });
+      if (dateFilter) {
+        andClauses.push({
+          $or: [{ disbursedDate: dateFilter }, { date: dateFilter }],
+        });
+      }
     } else if (followUpOnly) {
-      query.followUpDate = { $ne: null };
-    } else if (date) {
-      query.date = date;
+      if (dateFilter) {
+        andClauses.push({ followUpDate: dateFilter });
+      } else {
+        andClauses.push({ followUpDate: { $ne: null } });
+      }
+    } else if (dateFilter) {
+      andClauses.push({ date: dateFilter });
     }
 
     if (search) {
-      query.$or = [
-        { clientName: { $regex: search, $options: "i" } },
-        { clientPhone: { $regex: search, $options: "i" } },
-        { company: { $regex: search, $options: "i" } },
-        { requirement: { $regex: search, $options: "i" } },
-        { bankName: { $regex: search, $options: "i" } },
-        { disbursedBank: { $regex: search, $options: "i" } },
-      ];
+      andClauses.push({
+        $or: [
+          { clientName: { $regex: search, $options: "i" } },
+          { clientPhone: { $regex: search, $options: "i" } },
+          { company: { $regex: search, $options: "i" } },
+          { requirement: { $regex: search, $options: "i" } },
+          { bankName: { $regex: search, $options: "i" } },
+          { disbursedBank: { $regex: search, $options: "i" } },
+        ],
+      });
     }
 
+    const query = andClauses.length > 1 ? { $and: andClauses } : andClauses[0];
+
     const leads = await Lead.find(query).sort({ createdAt: -1 }).lean();
+
+    // Calculate view-specific stats for the filtered query (e.g. specific date)
+    const viewTotalLeads = leads.length;
+    const viewLogins = leads.filter((l) => l.isSentForLogin).length;
+    const viewLoginAmount = leads.reduce(
+      (sum, l) => sum + (l.isSentForLogin && l.loginAmount ? l.loginAmount : 0),
+      0
+    );
+    const viewDisbursed = leads.filter((l) => l.isDisbursed || l.status === "Disbursed").length;
+    const viewDisbursedAmount = leads.reduce(
+      (sum, l) =>
+        sum +
+        ((l.isDisbursed || l.status === "Disbursed") && l.disbursedAmount
+          ? l.disbursedAmount
+          : (l.isDisbursed || l.status === "Disbursed") && l.loginAmount
+          ? l.loginAmount
+          : 0),
+      0
+    );
 
     // Calculate today's stats for this agent
     const todayLeads = await Lead.find({ agentId: session.userId, date: today }).lean();
@@ -80,6 +126,16 @@ export async function GET(request: NextRequest) {
         totalDisbursedToday: todayDisbursed,
         totalDisbursedAmountToday: todayDisbursedAmount,
         todayFollowUps,
+      },
+      viewStats: {
+        filterDate: date || null,
+        startDate: startDate || null,
+        endDate: endDate || null,
+        totalLeads: viewTotalLeads,
+        totalLogins: viewLogins,
+        totalLoginAmount: viewLoginAmount,
+        totalDisbursed: viewDisbursed,
+        totalDisbursedAmount: viewDisbursedAmount,
       },
       leads: leads.map((l) => ({
         id: l._id.toString(),

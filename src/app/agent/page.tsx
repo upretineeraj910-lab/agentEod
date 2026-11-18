@@ -63,8 +63,9 @@ export default function AgentPage() {
     todayFollowUps: 0,
   });
 
-  // Filters
-  const [historyDate, setHistoryDate] = useState<string>("");
+  // Date Range Filters (From Date -> To Date)
+  const [startDate, setStartDate] = useState<string>("");
+  const [endDate, setEndDate] = useState<string>("");
   const [searchQuery, setSearchQuery] = useState<string>("");
   const [refreshTrigger, setRefreshTrigger] = useState<number>(0);
 
@@ -127,13 +128,23 @@ export default function AgentPage() {
         const params = new URLSearchParams();
 
         if (activeTab === "today") {
-          if (todayDate) params.append("date", todayDate);
+          if (startDate && endDate) {
+            params.append("startDate", startDate);
+            params.append("endDate", endDate);
+          } else if (todayDate) {
+            params.append("date", todayDate);
+          }
         } else if (activeTab === "disbursed") {
           params.append("disbursedOnly", "true");
+          if (startDate) params.append("startDate", startDate);
+          if (endDate) params.append("endDate", endDate);
         } else if (activeTab === "history") {
-          if (historyDate) params.append("date", historyDate);
+          if (startDate) params.append("startDate", startDate);
+          if (endDate) params.append("endDate", endDate);
         } else if (activeTab === "followups") {
           params.append("followUpOnly", "true");
+          if (startDate) params.append("startDate", startDate);
+          if (endDate) params.append("endDate", endDate);
         }
 
         if (searchQuery.trim()) {
@@ -163,7 +174,32 @@ export default function AgentPage() {
     return () => {
       active = false;
     };
-  }, [currentUser, activeTab, todayDate, historyDate, searchQuery, refreshTrigger]);
+  }, [currentUser, activeTab, todayDate, startDate, endDate, searchQuery, refreshTrigger]);
+
+  const applyPresetRange = (preset: "today" | "7days" | "month" | "all") => {
+    const today = todayDate || new Date().toISOString().split("T")[0];
+    if (preset === "today") {
+      setStartDate(today);
+      setEndDate(today);
+      setActiveTab("today");
+    } else if (preset === "7days") {
+      const d = new Date();
+      d.setDate(d.getDate() - 7);
+      setStartDate(d.toISOString().split("T")[0]);
+      setEndDate(today);
+      setActiveTab("history");
+    } else if (preset === "month") {
+      const d = new Date();
+      const monthStart = `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, "0")}-01`;
+      setStartDate(monthStart);
+      setEndDate(today);
+      setActiveTab("history");
+    } else if (preset === "all") {
+      setStartDate("");
+      setEndDate("");
+      setActiveTab("history");
+    }
+  };
 
   const handleSearchSubmit = (e: React.FormEvent) => {
     e.preventDefault();
@@ -358,6 +394,21 @@ export default function AgentPage() {
     );
   };
 
+  // Real-time computed metrics for the currently viewed leads (by active tab, date, and search)
+  const displayDisbursedCases = leads.filter((l) => l.isDisbursed || l.status === "Disbursed");
+  const displayDisbursedAmount = displayDisbursedCases.reduce(
+    (sum, l) => sum + (l.disbursedAmount || (l.status === "Disbursed" ? l.loginAmount : 0) || 0),
+    0
+  );
+  const displayDisbursedCount = displayDisbursedCases.length;
+
+  const displayLoginCases = leads.filter((l) => l.isSentForLogin);
+  const displayLoginAmount = displayLoginCases.reduce(
+    (sum, l) => sum + (l.loginAmount || 0),
+    0
+  );
+  const displayLoginCount = displayLoginCases.length;
+
   if (!currentUser) {
     return (
       <div className="min-h-screen bg-gray-50 flex items-center justify-center">
@@ -436,7 +487,7 @@ export default function AgentPage() {
 
           <div className="bg-gradient-to-br from-emerald-50 to-teal-50/50 p-4 sm:p-5 rounded-2xl border border-emerald-200/90 shadow-xs">
             <span className="text-[11px] font-bold text-emerald-800 uppercase tracking-wider block flex items-center justify-between">
-              <span>Disbursed Volume</span>
+              <span>Today Disbursed</span>
               <span className="px-1.5 py-0.5 rounded-full bg-emerald-200/80 text-emerald-900 text-[10px]">
                 {stats.totalDisbursedToday} Cases
               </span>
@@ -445,7 +496,7 @@ export default function AgentPage() {
               {formatINR(stats.totalDisbursedAmountToday)}
             </p>
             <span className="text-[11px] text-emerald-700 mt-1 block font-medium">
-              Sanctioned & disbursed
+              Sanctioned today
             </span>
           </div>
 
@@ -462,103 +513,249 @@ export default function AgentPage() {
           </div>
         </div>
 
-        {/* Tab Navigation Toolbar */}
-        <div className="bg-white rounded-2xl shadow-xs border border-gray-200/80 mb-6 p-4">
-          <div className="flex flex-col lg:flex-row lg:items-center justify-between gap-4">
-            <div className="flex items-center gap-2 overflow-x-auto pb-2 lg:pb-0">
-              <button
-                onClick={() => setActiveTab("today")}
-                className={`px-4 py-2 rounded-xl font-bold text-xs sm:text-sm whitespace-nowrap transition ${
-                  activeTab === "today"
-                    ? "bg-indigo-600 text-white shadow-xs"
-                    : "text-gray-600 hover:bg-gray-100"
-                }`}
-              >
-                Today&apos;s Pipeline ({stats.totalLeadsToday})
-              </button>
+        {/* Tab & Date Range Toolbar */}
+        <div className="bg-white rounded-2xl shadow-xs border border-gray-200/80 mb-6 p-4 sm:p-5">
+          <div className="flex flex-col gap-4">
+            {/* Row 1: Tabs + Search */}
+            <div className="flex flex-col lg:flex-row lg:items-center justify-between gap-4 pb-3 border-b border-gray-100">
+              <div className="flex items-center gap-2 overflow-x-auto pb-1 lg:pb-0">
+                <button
+                  onClick={() => applyPresetRange("today")}
+                  className={`px-4 py-2 rounded-xl font-bold text-xs sm:text-sm whitespace-nowrap transition ${
+                    activeTab === "today"
+                      ? "bg-indigo-600 text-white shadow-xs"
+                      : "text-gray-600 hover:bg-gray-100"
+                  }`}
+                >
+                  Today&apos;s Pipeline ({stats.totalLeadsToday})
+                </button>
 
-              <button
-                onClick={() => setActiveTab("disbursed")}
-                className={`px-4 py-2 rounded-xl font-bold text-xs sm:text-sm whitespace-nowrap transition flex items-center gap-1.5 ${
-                  activeTab === "disbursed"
-                    ? "bg-emerald-600 text-white shadow-xs"
-                    : "text-gray-600 hover:bg-gray-100"
-                }`}
-              >
-                <CheckCircleIcon className="w-4 h-4" />
-                Disbursed Cases
-              </button>
+                <button
+                  onClick={() => setActiveTab("disbursed")}
+                  className={`px-4 py-2 rounded-xl font-bold text-xs sm:text-sm whitespace-nowrap transition flex items-center gap-1.5 ${
+                    activeTab === "disbursed"
+                      ? "bg-emerald-600 text-white shadow-xs"
+                      : "text-gray-600 hover:bg-gray-100"
+                  }`}
+                >
+                  <CheckCircleIcon className="w-4 h-4" />
+                  Disbursed Cases
+                </button>
 
-              <button
-                onClick={() => setActiveTab("followups")}
-                className={`px-4 py-2 rounded-xl font-bold text-xs sm:text-sm whitespace-nowrap transition flex items-center gap-1.5 ${
-                  activeTab === "followups"
-                    ? "bg-amber-600 text-white shadow-xs"
-                    : "text-gray-600 hover:bg-gray-100"
-                }`}
-              >
-                <ClockIcon className="w-4 h-4" />
-                Follow-ups Queue
-              </button>
+                <button
+                  onClick={() => setActiveTab("followups")}
+                  className={`px-4 py-2 rounded-xl font-bold text-xs sm:text-sm whitespace-nowrap transition flex items-center gap-1.5 ${
+                    activeTab === "followups"
+                      ? "bg-amber-600 text-white shadow-xs"
+                      : "text-gray-600 hover:bg-gray-100"
+                  }`}
+                >
+                  <ClockIcon className="w-4 h-4" />
+                  Follow-ups Queue
+                </button>
 
-              <button
-                onClick={() => setActiveTab("history")}
-                className={`px-4 py-2 rounded-xl font-bold text-xs sm:text-sm whitespace-nowrap transition flex items-center gap-1.5 ${
-                  activeTab === "history"
-                    ? "bg-slate-700 text-white shadow-xs"
-                    : "text-gray-600 hover:bg-gray-100"
-                }`}
-              >
-                <CalendarIcon className="w-4 h-4" />
-                Previous Leads
-              </button>
-            </div>
+                <button
+                  onClick={() => {
+                    setActiveTab("history");
+                    if (startDate === todayDate && endDate === todayDate) {
+                      setStartDate("");
+                      setEndDate("");
+                    }
+                  }}
+                  className={`px-4 py-2 rounded-xl font-bold text-xs sm:text-sm whitespace-nowrap transition flex items-center gap-1.5 ${
+                    activeTab === "history"
+                      ? "bg-slate-700 text-white shadow-xs"
+                      : "text-gray-600 hover:bg-gray-100"
+                  }`}
+                >
+                  <CalendarIcon className="w-4 h-4" />
+                  All Records
+                </button>
+              </div>
 
-            {/* Filters */}
-            <div className="flex flex-wrap items-center gap-3">
-              {activeTab === "history" && (
-                <div className="flex items-center gap-2">
-                  <span className="text-xs font-semibold text-gray-500">Date:</span>
-                  <input
-                    type="date"
-                    value={historyDate}
-                    onChange={(e) => setHistoryDate(e.target.value)}
-                    className="px-3 py-1.5 border border-gray-300 rounded-lg text-xs text-gray-800 focus:outline-none focus:ring-2 focus:ring-indigo-500"
-                  />
-                </div>
-              )}
-
-              <form onSubmit={handleSearchSubmit} className="flex items-center gap-2">
+              {/* Search Box */}
+              <form onSubmit={handleSearchSubmit} className="flex items-center gap-2 shrink-0">
                 <div className="relative">
                   <input
                     type="text"
                     placeholder="Search client, phone, bank..."
                     value={searchQuery}
                     onChange={(e) => setSearchQuery(e.target.value)}
-                    className="w-52 px-3 py-1.5 pl-8 border border-gray-300 rounded-lg text-xs text-gray-800 placeholder-gray-400 focus:outline-none focus:ring-2 focus:ring-indigo-500"
+                    className="w-56 px-3 py-1.5 pl-8 border border-gray-300 rounded-lg text-xs text-gray-800 placeholder-gray-400 focus:outline-none focus:ring-2 focus:ring-indigo-500 bg-white"
                   />
                   <SearchIcon className="w-3.5 h-3.5 text-gray-400 absolute left-2.5 top-1/2 -translate-y-1/2" />
                 </div>
                 <button
                   type="submit"
-                  className="px-3 py-1.5 bg-gray-100 hover:bg-gray-200 text-gray-700 text-xs font-semibold rounded-lg transition"
+                  className="px-3.5 py-1.5 bg-gray-100 hover:bg-gray-200 text-gray-700 text-xs font-semibold rounded-lg transition"
                 >
                   Filter
                 </button>
               </form>
             </div>
+
+            {/* Row 2: Date Range Filter (From Date -> To Date) */}
+            <div className="flex flex-wrap items-center justify-between gap-3 pt-1">
+              <div className="flex flex-wrap items-center gap-2.5">
+                <span className="text-xs font-bold text-slate-700 flex items-center gap-1.5">
+                  <CalendarIcon className="w-4 h-4 text-indigo-600" />
+                  Date Range:
+                </span>
+
+                <div className="flex items-center gap-1.5 bg-slate-50 border border-slate-200 p-1.5 rounded-xl">
+                  <span className="text-[11px] font-semibold text-gray-500 pl-1">From:</span>
+                  <input
+                    type="date"
+                    value={startDate}
+                    onChange={(e) => {
+                      setStartDate(e.target.value);
+                      if (activeTab === "today") setActiveTab("history");
+                    }}
+                    className="px-2 py-1 border border-gray-300 rounded-lg text-xs font-semibold text-gray-800 bg-white focus:outline-none focus:ring-2 focus:ring-indigo-500"
+                  />
+                  <span className="text-[11px] font-semibold text-gray-500 px-1">To:</span>
+                  <input
+                    type="date"
+                    value={endDate}
+                    onChange={(e) => {
+                      setEndDate(e.target.value);
+                      if (activeTab === "today") setActiveTab("history");
+                    }}
+                    className="px-2 py-1 border border-gray-300 rounded-lg text-xs font-semibold text-gray-800 bg-white focus:outline-none focus:ring-2 focus:ring-indigo-500"
+                  />
+                </div>
+
+                {/* Quick Presets */}
+                <div className="flex items-center gap-1.5 flex-wrap">
+                  <button
+                    type="button"
+                    onClick={() => applyPresetRange("today")}
+                    className={`px-2.5 py-1 text-xs font-bold rounded-lg transition ${
+                      startDate === todayDate && endDate === todayDate
+                        ? "bg-indigo-600 text-white shadow-xs"
+                        : "bg-gray-100 hover:bg-gray-200 text-gray-700 border border-gray-200"
+                    }`}
+                  >
+                    Today
+                  </button>
+                  <button
+                    type="button"
+                    onClick={() => applyPresetRange("7days")}
+                    className="px-2.5 py-1 text-xs font-bold rounded-lg bg-gray-100 hover:bg-gray-200 text-gray-700 border border-gray-200 transition"
+                  >
+                    Last 7 Days
+                  </button>
+                  <button
+                    type="button"
+                    onClick={() => applyPresetRange("month")}
+                    className="px-2.5 py-1 text-xs font-bold rounded-lg bg-gray-100 hover:bg-gray-200 text-gray-700 border border-gray-200 transition"
+                  >
+                    This Month
+                  </button>
+                  {(startDate || endDate) && (
+                    <button
+                      type="button"
+                      onClick={() => applyPresetRange("all")}
+                      className="px-2.5 py-1 text-xs font-bold rounded-lg bg-rose-50 text-rose-700 hover:bg-rose-100 border border-rose-200 transition"
+                      title="Clear date range to see all records"
+                    >
+                      Clear Range
+                    </button>
+                  )}
+                </div>
+              </div>
+
+              {/* Active Filter Indicator */}
+              {(startDate || endDate) && (
+                <div className="text-xs text-indigo-700 bg-indigo-50 font-semibold px-3 py-1 rounded-lg border border-indigo-100 flex items-center gap-1.5">
+                  <span>Filtered Range:</span>
+                  <span className="font-extrabold">{startDate || "Start"}</span>
+                  <span>➔</span>
+                  <span className="font-extrabold">{endDate || "End"}</span>
+                </div>
+              )}
+            </div>
           </div>
         </div>
 
-        {/* Notice for History Mode */}
-        {activeTab === "history" && (
-          <div className="mb-6 p-4 rounded-xl bg-indigo-50/80 border border-indigo-100 text-indigo-900 text-xs flex items-center gap-2.5">
-            <CalendarIcon className="w-4 h-4 text-indigo-600 shrink-0" />
-            <span>
-              <strong>Lead History:</strong> You can edit and update past leads anytime to update loan stages, login submissions, follow-up notes, or disbursals.
-            </span>
+        {/* Dynamic Date & Disbursal Performance Summary Banner */}
+        <div className="mb-6 p-4 sm:p-5 rounded-2xl bg-gradient-to-r from-emerald-600 via-teal-600 to-indigo-700 text-white shadow-sm border border-emerald-500/30">
+          <div className="flex flex-col md:flex-row md:items-center justify-between gap-4">
+            <div className="flex items-center gap-3.5">
+              <div className="w-12 h-12 rounded-xl bg-white/20 backdrop-blur-md flex items-center justify-center shrink-0 border border-white/30 shadow-inner">
+                <CheckCircleIcon className="w-6 h-6 text-white" />
+              </div>
+              <div>
+                <div className="flex items-center gap-2 flex-wrap">
+                  <span className="text-[11px] font-bold uppercase tracking-wider bg-white/25 px-2.5 py-0.5 rounded-full text-white">
+                    {activeTab === "today" && (!startDate || (startDate === todayDate && endDate === todayDate))
+                      ? "Today's Summary"
+                      : activeTab === "disbursed"
+                      ? "Disbursal Report"
+                      : activeTab === "followups"
+                      ? "Follow-ups Queue"
+                      : "Date Range Report"}
+                  </span>
+                  {startDate && endDate ? (
+                    <span className="text-xs font-semibold text-emerald-100 flex items-center gap-1 bg-black/20 px-2.5 py-0.5 rounded-md">
+                      <CalendarIcon className="w-3.5 h-3.5 text-emerald-200" />
+                      Range: {startDate} ➔ {endDate}
+                    </span>
+                  ) : startDate ? (
+                    <span className="text-xs font-semibold text-emerald-100 flex items-center gap-1 bg-black/20 px-2.5 py-0.5 rounded-md">
+                      <CalendarIcon className="w-3.5 h-3.5 text-emerald-200" />
+                      From: {startDate}
+                    </span>
+                  ) : activeTab === "today" && todayDate ? (
+                    <span className="text-xs font-semibold text-emerald-100 flex items-center gap-1 bg-black/20 px-2.5 py-0.5 rounded-md">
+                      <CalendarIcon className="w-3.5 h-3.5 text-emerald-200" />
+                      Today: {todayDate}
+                    </span>
+                  ) : (
+                    <span className="text-xs font-semibold text-emerald-100 bg-black/20 px-2.5 py-0.5 rounded-md">
+                      All Dates Combined
+                    </span>
+                  )}
+                </div>
+                <div className="flex items-baseline gap-2 mt-1.5 flex-wrap">
+                  <span className="text-xs font-semibold text-emerald-100">Disbursed Total:</span>
+                  <span className="text-xl sm:text-2xl font-black text-white tracking-tight">
+                    {formatINR(displayDisbursedAmount)}
+                  </span>
+                  <span className="text-xs font-bold text-emerald-100 bg-emerald-900/40 px-2 py-0.5 rounded-full border border-emerald-400/30">
+                    {displayDisbursedCount} {displayDisbursedCount === 1 ? "Case" : "Cases"}
+                  </span>
+                </div>
+              </div>
+            </div>
+
+            <div className="flex flex-wrap items-center gap-4 sm:gap-6 border-t md:border-t-0 md:border-l border-white/20 pt-3 md:pt-0 md:pl-6">
+              <div>
+                <span className="text-[11px] text-emerald-100 font-medium block">
+                  Logins Dispatched
+                </span>
+                <span className="text-lg font-extrabold text-white">
+                  {formatINR(displayLoginAmount)}
+                </span>
+                <span className="text-[10px] text-emerald-200 block font-medium">
+                  {displayLoginCount} {displayLoginCount === 1 ? "File" : "Files"}
+                </span>
+              </div>
+
+              <div>
+                <span className="text-[11px] text-emerald-100 font-medium block">
+                  Active Leads
+                </span>
+                <span className="text-lg font-extrabold text-white">
+                  {leads.length}
+                </span>
+                <span className="text-[10px] text-emerald-200 block font-medium">
+                  Total in view
+                </span>
+              </div>
+            </div>
           </div>
-        )}
+        </div>
 
         {/* Leads Table */}
         <div className="bg-white rounded-2xl shadow-xs border border-gray-200/80 overflow-hidden">
@@ -574,7 +771,9 @@ export default function AgentPage() {
                   <th className="py-3.5 px-4">Bank & Amount</th>
                   <th className="py-3.5 px-4">Follow-up</th>
                   <th className="py-3.5 px-4">Remarks</th>
-                  <th className="py-3.5 px-4 text-right">Actions</th>
+                  <th className="py-3.5 px-4 text-right sticky right-0 bg-gray-50/95 border-l border-gray-200 z-10 shadow-xs">
+                    Actions
+                  </th>
                 </tr>
               </thead>
               <tbody className="divide-y divide-gray-200/80 text-xs text-gray-700">
@@ -602,8 +801,24 @@ export default function AgentPage() {
                         )}
                       </td>
                       <td className="py-3.5 px-4">
-                        <div className="font-bold text-gray-900">
-                          {lead.clientName}
+                        <div className="flex items-center justify-between gap-2">
+                          <button
+                            type="button"
+                            onClick={() => openEditModal(lead)}
+                            className="font-bold text-gray-900 hover:text-indigo-600 text-left transition"
+                            title="Click to edit or mark as disbursed"
+                          >
+                            {lead.clientName}
+                          </button>
+                          <button
+                            type="button"
+                            onClick={() => openEditModal(lead)}
+                            className="inline-flex items-center gap-1 text-[11px] font-bold text-indigo-700 bg-indigo-50 hover:bg-indigo-100 px-2 py-0.5 rounded-md border border-indigo-200 transition shrink-0"
+                            title="Edit / Mark Disbursed"
+                          >
+                            <EditIcon className="w-3 h-3" />
+                            Edit
+                          </button>
                         </div>
                         <div className="text-gray-500 flex items-center gap-1 mt-0.5 font-medium">
                           <PhoneIcon className="w-3.5 h-3.5 text-gray-400" />
@@ -671,7 +886,7 @@ export default function AgentPage() {
                       <td className="py-3.5 px-4 text-gray-600 max-w-xs truncate" title={lead.remarks}>
                         {lead.remarks || "-"}
                       </td>
-                      <td className="py-3.5 px-4 text-right whitespace-nowrap">
+                      <td className="py-3.5 px-4 text-right whitespace-nowrap sticky right-0 bg-white/95 backdrop-blur-xs border-l border-gray-200 z-10 shadow-xs">
                         <div className="flex items-center justify-end gap-1.5">
                           <button
                             onClick={() => openEditModal(lead)}
@@ -693,6 +908,58 @@ export default function AgentPage() {
                   ))
                 )}
               </tbody>
+              {leads.length > 0 && (
+                <tfoot className="bg-slate-50/95 border-t-2 border-gray-300 text-xs font-bold text-gray-900">
+                  <tr>
+                    <td colSpan={5} className="py-3 px-4 text-gray-700">
+                      <div className="flex items-center gap-2 flex-wrap">
+                        <span className="uppercase tracking-wider text-[11px] font-extrabold text-slate-700">
+                          Total for this Range ({leads.length} {leads.length === 1 ? "Lead" : "Leads"})
+                        </span>
+                        {startDate && endDate ? (
+                          <span className="text-[11px] font-semibold text-indigo-600 bg-indigo-50 px-2 py-0.5 rounded border border-indigo-100">
+                            Range: {startDate} ➔ {endDate}
+                          </span>
+                        ) : startDate ? (
+                          <span className="text-[11px] font-semibold text-indigo-600 bg-indigo-50 px-2 py-0.5 rounded border border-indigo-100">
+                            From: {startDate}
+                          </span>
+                        ) : activeTab === "today" && todayDate ? (
+                          <span className="text-[11px] font-semibold text-indigo-600 bg-indigo-50 px-2 py-0.5 rounded border border-indigo-100">
+                            Today: {todayDate}
+                          </span>
+                        ) : null}
+                      </div>
+                    </td>
+                    <td className="py-3 px-4 whitespace-nowrap">
+                      <div className="space-y-1">
+                        {displayDisbursedAmount > 0 && (
+                          <div className="text-emerald-800 font-black text-xs">
+                            Disbursed: {formatINR(displayDisbursedAmount)}
+                            <span className="text-[10px] text-emerald-700 font-semibold ml-1">
+                              ({displayDisbursedCount} {displayDisbursedCount === 1 ? "Case" : "Cases"})
+                            </span>
+                          </div>
+                        )}
+                        {displayLoginAmount > 0 && (
+                          <div className="text-blue-800 font-black text-xs">
+                            Login: {formatINR(displayLoginAmount)}
+                            <span className="text-[10px] text-blue-700 font-semibold ml-1">
+                              ({displayLoginCount} {displayLoginCount === 1 ? "File" : "Files"})
+                            </span>
+                          </div>
+                        )}
+                        {displayDisbursedAmount === 0 && displayLoginAmount === 0 && (
+                          <span className="text-gray-400 font-medium">₹0</span>
+                        )}
+                      </div>
+                    </td>
+                    <td colSpan={3} className="py-3 px-4 text-right text-gray-500 font-medium text-[11px] sticky right-0 bg-slate-50 border-l border-gray-200 z-10">
+                      {displayDisbursedCount} Disbursed &bull; {displayLoginCount} Logins
+                    </td>
+                  </tr>
+                </tfoot>
+              )}
             </table>
           </div>
         </div>
