@@ -15,7 +15,6 @@ import {
   DownloadIcon,
   ShieldIcon,
   BriefcaseIcon,
-  TrashIcon,
 } from "@/components/Icons";
 import { formatINR, exportToCSV } from "@/lib/utils";
 

@@ -26,18 +26,7 @@ export async function PUT(
       return NextResponse.json({ message: "You do not have permission to edit this record." }, { status: 403 });
     }
 
-    // STRICT CHECK: Past day record cannot be edited!
     const today = getTodayDateString();
-    if (lead.date !== today) {
-      return NextResponse.json(
-        {
-          message:
-            "Record locked: Historical records from previous days cannot be modified. Only today's submissions are editable.",
-        },
-        { status: 403 }
-      );
-    }
-
     const body = await request.json();
     const {
       clientName,
@@ -139,18 +128,6 @@ export async function DELETE(
 
     if (lead.agentId.toString() !== session.userId) {
       return NextResponse.json({ message: "You do not have permission to delete this record." }, { status: 403 });
-    }
-
-    // STRICT CHECK: Past day record cannot be deleted
-    const today = getTodayDateString();
-    if (lead.date !== today) {
-      return NextResponse.json(
-        {
-          message:
-            "Record locked: Historical records from previous days cannot be removed under EOD compliance policy.",
-        },
-        { status: 403 }
-      );
     }
 
     await Lead.findByIdAndDelete(id);

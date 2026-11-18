@@ -12,7 +12,6 @@ import {
   PlusIcon,
   EditIcon,
   TrashIcon,
-  LockIcon,
   SearchIcon,
 } from "@/components/Icons";
 import { formatINR } from "@/lib/utils";
@@ -194,10 +193,6 @@ export default function AgentPage() {
   };
 
   const openEditModal = (item: LeadItem) => {
-    if (!item.isToday) {
-      alert("Historical records from previous days cannot be modified. Only today's entries are editable.");
-      return;
-    }
     setIsEditing(true);
     setEditingId(item.id);
     setClientName(item.clientName);
@@ -291,10 +286,6 @@ export default function AgentPage() {
   };
 
   const handleDelete = async (item: LeadItem) => {
-    if (!item.isToday) {
-      alert("Historical records from previous days cannot be deleted under EOD compliance policy.");
-      return;
-    }
     if (!confirm(`Are you sure you want to remove lead: ${item.clientName}?`)) {
       return;
     }
@@ -518,8 +509,8 @@ export default function AgentPage() {
                     : "text-gray-600 hover:bg-gray-100"
                 }`}
               >
-                <LockIcon className="w-4 h-4" />
-                Archived History
+                <CalendarIcon className="w-4 h-4" />
+                Previous Leads
               </button>
             </div>
 
@@ -561,10 +552,10 @@ export default function AgentPage() {
 
         {/* Notice for History Mode */}
         {activeTab === "history" && (
-          <div className="mb-6 p-4 rounded-xl bg-slate-100 border border-slate-200 text-slate-700 text-xs flex items-center gap-2.5">
-            <LockIcon className="w-4 h-4 text-slate-600 shrink-0" />
+          <div className="mb-6 p-4 rounded-xl bg-indigo-50/80 border border-indigo-100 text-indigo-900 text-xs flex items-center gap-2.5">
+            <CalendarIcon className="w-4 h-4 text-indigo-600 shrink-0" />
             <span>
-              <strong>Archived Mode:</strong> Historical records from previous dates are finalized and preserved in read-only format in compliance with standard EOD reporting policies.
+              <strong>Lead History:</strong> You can edit and update past leads anytime to update loan stages, login submissions, follow-up notes, or disbursals.
             </span>
           </div>
         )}
@@ -681,29 +672,22 @@ export default function AgentPage() {
                         {lead.remarks || "-"}
                       </td>
                       <td className="py-3.5 px-4 text-right whitespace-nowrap">
-                        {lead.isToday ? (
-                          <div className="flex items-center justify-end gap-1.5">
-                            <button
-                              onClick={() => openEditModal(lead)}
-                              title="Edit Lead Entry"
-                              className="p-1.5 text-indigo-600 hover:text-indigo-800 hover:bg-indigo-50 rounded-lg transition"
-                            >
-                              <EditIcon className="w-4 h-4" />
-                            </button>
-                            <button
-                              onClick={() => handleDelete(lead)}
-                              title="Delete Lead Entry"
-                              className="p-1.5 text-rose-600 hover:text-rose-800 hover:bg-rose-50 rounded-lg transition"
-                            >
-                              <TrashIcon className="w-4 h-4" />
-                            </button>
-                          </div>
-                        ) : (
-                          <span className="inline-flex items-center gap-1 text-[11px] font-semibold text-slate-400 bg-slate-100 px-2 py-1 rounded-md">
-                            <LockIcon className="w-3 h-3 text-slate-400" />
-                            Locked
-                          </span>
-                        )}
+                        <div className="flex items-center justify-end gap-1.5">
+                          <button
+                            onClick={() => openEditModal(lead)}
+                            title="Edit Lead Entry"
+                            className="p-1.5 text-indigo-600 hover:text-indigo-800 hover:bg-indigo-50 rounded-lg transition"
+                          >
+                            <EditIcon className="w-4 h-4" />
+                          </button>
+                          <button
+                            onClick={() => handleDelete(lead)}
+                            title="Delete Lead Entry"
+                            className="p-1.5 text-rose-600 hover:text-rose-800 hover:bg-rose-50 rounded-lg transition"
+                          >
+                            <TrashIcon className="w-4 h-4" />
+                          </button>
+                        </div>
                       </td>
                     </tr>
                   ))
